@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/electron/services/aiEnrichment.js
+// /Users/montysharma/Projects/news_agg/news_agg/electron/services/aiEnrichment.js
 
 /**
  * AI enrichment for the Electron desktop pipeline.
@@ -12,7 +12,7 @@
  */
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-const AI_MODEL = process.env.AI_ARTICLE_MODEL || "qwen2.5-coder:7b";
+const AI_MODEL = process.env.AI_ARTICLE_MODEL || "gemma4:26b";
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 45000;
 const BATCH_SIZE = 6;
 const PAUSE_BETWEEN_BATCHES_MS = 300;
@@ -20,7 +20,7 @@ const PAUSE_BETWEEN_BATCHES_MS = 300;
 const ARTICLE_DOMAINS = [
   "AIUse", "LLM", "AIInfra", "Semis", "Cloud", "Security", "Consumer", "Bio",
   "Climate", "Crypto", "Policy", "Space", "Robotics",
-  "Batteries", "AR", "General",
+  "Batteries", "AR", "Materials", "General",
 ];
 
 const LEGACY_DOMAIN_REMAP = {
@@ -40,6 +40,7 @@ const SYSTEM_PROMPT = `You are a technology analyst. For each article:
    - "AIUse" = consumer-facing AI apps, tutorials, prompt tips, what people are doing with AI, AI-assisted products
    - "AIInfra" = AI hardware and infrastructure (NVIDIA/TPU/accelerator chips, GPU clusters, training/inference infra, datacenter buildouts FOR AI, AI compute economics)
    Use "Semis" only for general chip industry news unrelated to AI workloads.
+   "Materials" = materials science breakthroughs: novel alloys, polymers, ceramics, graphene/2D materials, superconductors, photovoltaics, nanomaterials. Prefer "Batteries" for energy-storage chemistry; prefer "Semis" for chip-fab process tech.
 3. Optionally add up to 2 secondary domains (different from primary, omit if none fit)
 4. Assign 2-4 specific lowercase tags reflecting underlying trends (NOT generic words like "ai" or "tech")
 5. Rate importance 1-5:
@@ -167,6 +168,10 @@ async function callOllama(articles) {
       { role: "user", content: buildUserPrompt(articles) },
     ],
     stream: false,
+    // Thinking models (e.g. gemma4) otherwise emit reasoning into a separate
+    // `thinking` field and leave `content` empty, breaking extractJson below.
+    // Non-thinking models (e.g. qwen2.5) ignore this flag.
+    think: false,
     format: "json",
     options: {
       temperature: 0,

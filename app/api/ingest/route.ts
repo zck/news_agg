@@ -20,6 +20,7 @@ const domains: ArticleDomain[] = [
   "Robotics",
   "Batteries",
   "AR",
+  "Materials",
   "General",
 ];
 

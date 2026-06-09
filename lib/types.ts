@@ -14,6 +14,7 @@ export type ArticleDomain =
   | "Robotics"
   | "Batteries"
   | "AR"
+  | "Materials"
   | "General";
 
 export const ARTICLE_DOMAINS: readonly ArticleDomain[] = [
@@ -32,6 +33,7 @@ export const ARTICLE_DOMAINS: readonly ArticleDomain[] = [
   "Robotics",
   "Batteries",
   "AR",
+  "Materials",
   "General",
 ] as const;
 
@@ -51,6 +53,7 @@ export const DOMAIN_LABELS: Record<ArticleDomain, string> = {
   Robotics: "Robotics",
   Batteries: "Batteries",
   AR: "AR",
+  Materials: "Materials",
   General: "General",
 };
 

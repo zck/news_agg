@@ -166,4 +166,13 @@ a {
     content: "";
     @apply h-1.5 w-1.5 rounded-full bg-emerald-500;
   }
+
+  /* Scan Terminal — small static utilities reused by ReaderPane + TeachingDrawer */
+  .scan-icon-btn {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-[13px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500;
+  }
+
+  .scan-kbd {
+    @apply mr-1.5 inline-block rounded-[3px] border border-slate-300 bg-white px-[5px] py-px font-mono text-[10px] text-slate-600;
+  }
 }

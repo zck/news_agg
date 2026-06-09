@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/components/ArticleFeed.tsx
+// /Users/montysharma/Projects/news_agg/news_agg/components/ArticleFeed.tsx
 
 "use client";
 

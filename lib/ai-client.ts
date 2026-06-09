@@ -55,6 +55,10 @@ export function getAIClient(): AIClient | null {
         model: request.model,
         messages: request.messages,
         stream: false,
+        // Thinking models (e.g. gemma4) otherwise emit reasoning into a separate
+        // `thinking` field and leave `content` empty, breaking our JSON parsing.
+        // Non-thinking models (e.g. qwen2.5) ignore this flag.
+        think: false,
         ...(request.format !== undefined ? { format: request.format } : {}),
         options: {
           temperature: request.temperature ?? 0,
@@ -100,6 +104,6 @@ export function getAIClient(): AIClient | null {
   };
 }
 
-export const AI_ARTICLE_MODEL = process.env.AI_ARTICLE_MODEL || "qwen2.5-coder:7b";
-export const AI_BRIEF_MODEL = process.env.AI_BRIEF_MODEL || "qwen2.5:14b-instruct";
-export const AI_INSIGHT_MODEL = process.env.AI_INSIGHT_MODEL || "qwen2.5:14b-instruct";
+export const AI_ARTICLE_MODEL = process.env.AI_ARTICLE_MODEL || "gemma4:26b";
+export const AI_BRIEF_MODEL = process.env.AI_BRIEF_MODEL || "gemma4:26b";
+export const AI_INSIGHT_MODEL = process.env.AI_INSIGHT_MODEL || "gemma4:26b";

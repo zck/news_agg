@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/lib/ingest.ts
+// /Users/montysharma/Projects/news_agg/news_agg/lib/ingest.ts
 //
 // Key changes:
 //   - MAX_ARTICLES_PER_SOURCE: 5 → 20

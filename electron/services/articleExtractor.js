@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/electron/services/articleExtractor.js
+// /Users/montysharma/Projects/news_agg/news_agg/electron/services/articleExtractor.js
 
 /**
  * Lightweight full-text article extractor.

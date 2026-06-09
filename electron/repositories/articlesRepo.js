@@ -17,6 +17,7 @@ const ARTICLE_DOMAINS = [
   "Robotics",
   "Batteries",
   "AR",
+  "Materials",
   "General",
 ];
 

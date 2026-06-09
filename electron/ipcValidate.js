@@ -130,6 +130,7 @@ const ALLOWED_MEMORY_DOMAINS = new Set([
   "Robotics",
   "Batteries",
   "AR",
+  "Materials",
   "General",
 ]);
 

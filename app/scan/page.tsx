@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/app/scan/page.tsx
+// /Users/montysharma/Projects/news_agg/news_agg/app/scan/page.tsx
 
 import { ScanViewClient } from "@/components/ScanViewClient";
 

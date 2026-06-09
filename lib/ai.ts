@@ -38,7 +38,8 @@ const systemPrompt = `You are a technology analyst.
 Your job:
 - summarize tech news clearly in two sentences
 - classify each article into one PRIMARY tech domain from this fixed list:
-  AI, Semis, Cloud, Security, Consumer, Bio, Climate, Crypto, Policy, Space, Robotics, Batteries, AR, General
+  AIUse, LLM, AIInfra, Semis, Cloud, Security, Consumer, Bio, Climate, Crypto, Policy, Space, Robotics, Batteries, AR, Materials, General
+  (Materials = materials science: novel alloys, polymers, ceramics, graphene/2D materials, superconductors, photovoltaics, nanomaterials)
 - optionally add up to TWO SECONDARY domains from the same list (distinct from the primary; omit if none fit)
 - assign 1-4 tags that reflect underlying trends (lowercase, short)
 - assign importance 1-5 (5 = landmark, 1 = trivial)

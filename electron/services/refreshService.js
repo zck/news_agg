@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/electron/services/refreshService.js
+// /Users/montysharma/Projects/news_agg/news_agg/electron/services/refreshService.js
 //
 // Key changes from original:
 //   - MAX_ARTICLES_PER_SOURCE: 5 → 20

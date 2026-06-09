@@ -47,6 +47,7 @@ const domains: Array<"All" | ArticleDomain> = [
   "Robotics",
   "Batteries",
   "AR",
+  "Materials",
   "General",
 ];
 

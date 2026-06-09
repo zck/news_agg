@@ -1,4 +1,4 @@
-// /Users/montysharma/Documents/news_agg/news_agg/electron/services/sources.js
+// /Users/montysharma/Projects/news_agg/news_agg/electron/services/sources.js
 
 const sources = [
   // ── LLM: major model labs + research ────────────────────
@@ -81,6 +81,13 @@ const sources = [
   // ── AR / VR ─────────────────────────────────────────────
   { name: "Road to VR", url: "https://www.roadtovr.com/feed/", category: "AR" },
   { name: "UploadVR", url: "https://www.uploadvr.com/feed/", category: "AR" },
+
+  // ── Materials Science ───────────────────────────────────
+  { name: "Materials Today", url: "https://www.materialstoday.com/rss/news/", category: "Materials" },
+  { name: "ScienceDaily Materials", url: "https://www.sciencedaily.com/rss/matter_energy/materials_science.xml", category: "Materials" },
+  { name: "ScienceDaily Nanotech", url: "https://www.sciencedaily.com/rss/matter_energy/nanotechnology.xml", category: "Materials" },
+  { name: "Phys.org Condensed Matter", url: "https://phys.org/rss-feed/physics-news/condensed-matter/", category: "Materials" },
+  { name: "Arxiv Materials Science", url: "http://export.arxiv.org/rss/cond-mat.mtrl-sci", category: "Materials" },
 
   // ── General / Macro Tech ────────────────────────────────
   { name: "Hacker News (Best)", url: "https://hnrss.org/best", category: "General" },

@@ -615,7 +615,14 @@ export function CommandCenterClient({
   }, [activeTags, initialTrendSignals, patterns.generatedAt, patterns.trendingUp]);
 
   const megaStories = useMemo(() => {
-    return [...filteredClusters]
+    const todaysClusters = filteredClusters.filter((cluster) =>
+      cluster.articleIds.some((id) => {
+        const article = articleLookup.get(id);
+        return article ? withinRange(article, "today") : false;
+      }),
+    );
+
+    return [...todaysClusters]
       .sort((left, right) => {
         const rightScore = personalizedView
           ? (right.adaptiveScore ?? right.impactScore)
@@ -626,7 +633,7 @@ export function CommandCenterClient({
         return rightScore - leftScore;
       })
       .slice(0, MEGA_STORY_LIMIT);
-  }, [filteredClusters, personalizedView]);
+  }, [articleLookup, filteredClusters, personalizedView]);
 
   const sortedArticles = useMemo(() => {
     return [...filteredArticles].sort((left, right) => {

@@ -16,6 +16,7 @@ export const dashboardGroups = [
   { title: "Robotics", domains: ["Robotics"] },
   { title: "Batteries", domains: ["Batteries"] },
   { title: "AR", domains: ["AR"] },
+  { title: "Materials", domains: ["Materials"] },
   { title: "General", domains: ["General"] },
 ] satisfies { title: string; domains: ArticleDomain[] }[];
 
