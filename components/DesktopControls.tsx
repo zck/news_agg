@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type DesktopControlsProps = {
   exportPayload: unknown;
   refreshStatus?: string | null;
-  onRefreshComplete?: () => void;
+  onRefreshComplete?: (result?: DesktopOperationResult) => void;
   onPreferencesLoaded?: (preferences: DesktopPreferences) => void;
   onClearLearning?: () => void;
 };
@@ -96,7 +96,7 @@ export function DesktopControls({
       setRefreshing(false);
       setLastRefreshResult(result);
       setExportStatus(formatArticleImpact(result));
-      onRefreshComplete?.();
+      onRefreshComplete?.(result);
     });
     const removeImportListener = window.desktop?.imports.onImportComplete((result) => {
       setExportStatus(
@@ -168,7 +168,7 @@ export function DesktopControls({
           }`
         : "Refresh failed",
     );
-    onRefreshComplete?.();
+    onRefreshComplete?.(result ?? undefined);
   };
 
   const savePreference = async (payload: Partial<DesktopPreferences>) => {

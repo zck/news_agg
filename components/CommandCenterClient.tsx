@@ -190,6 +190,20 @@ function uniqueStrings(values: Array<string | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
+function validIsoLike(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function refreshTimestampFromResult(result: DesktopOperationResult | null | undefined) {
+  return (
+    validIsoLike(result?.completedAt) ??
+    validIsoLike(result?.fetchedAt) ??
+    validIsoLike(result?.startedAt)
+  );
+}
+
 function clientTokens(value: string) {
   return value
     .toLowerCase()
@@ -432,13 +446,24 @@ export function CommandCenterClient({
     setRules(pick(settled[7] as PromiseSettledResult<PersonalizationRule[]>, []));
 
     const lastRefresh = settled[8].status === "fulfilled" ? settled[8].value : null;
+    const preferences = settled[9].status === "fulfilled" ? settled[9].value : null;
+    const refreshTimestamp =
+      refreshTimestampFromResult(preferences?.lastRefreshStats) ??
+      validIsoLike(lastRefresh) ??
+      validIsoLike(localArticles[0]?.processed_at) ??
+      initialFetchedAt;
 
     const learned = rebuildLearningProfile(localArticles, localFeedback);
     setLearningProfile(learned);
     saveLearningProfile(learned);
-    setFetchedAt(lastRefresh ?? localArticles[0]?.processed_at ?? initialFetchedAt);
+    setFetchedAt((current) => {
+      const currentTime = new Date(current).getTime();
+      const nextTime = new Date(refreshTimestamp).getTime();
+      return !Number.isNaN(nextTime) && (Number.isNaN(currentTime) || nextTime >= currentTime)
+        ? refreshTimestamp
+        : current;
+    });
 
-    const preferences = settled[9].status === "fulfilled" ? settled[9].value : null;
     if (preferences) {
       setPersonalizedView(preferences.personalizedDefault);
       setRefreshStatus(
@@ -811,12 +836,14 @@ export function CommandCenterClient({
   const activeFilterCount =
     (activeDomain === "All" ? 0 : 1) + activeTags.length + (personalizedView ? 1 : 0);
   const lastRefreshDate = new Date(fetchedAt);
-  const lastRefreshLabel = lastRefreshDate.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const lastRefreshLabel = Number.isNaN(lastRefreshDate.getTime())
+    ? "not recorded"
+    : lastRefreshDate.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
 
   const kpiTiles = useMemo<KPITile[]>(() => {
     const windowDays = timeRange === "today" ? 1 : timeRange === "week" ? 7 : 30;
@@ -1262,9 +1289,31 @@ export function CommandCenterClient({
             <DesktopControls
               exportPayload={desktopExportPayload}
               refreshStatus={refreshStatus}
-              onRefreshComplete={loadDesktopData}
+              onRefreshComplete={(result) => {
+                const completedAt = refreshTimestampFromResult(result);
+                if (completedAt) {
+                  setFetchedAt((current) => {
+                    const currentTime = new Date(current).getTime();
+                    const nextTime = new Date(completedAt).getTime();
+                    return Number.isNaN(currentTime) || nextTime >= currentTime
+                      ? completedAt
+                      : current;
+                  });
+                }
+                void loadDesktopData();
+              }}
               onPreferencesLoaded={(preferences) => {
                 setPersonalizedView(preferences.personalizedDefault);
+                const completedAt = refreshTimestampFromResult(preferences.lastRefreshStats);
+                if (completedAt) {
+                  setFetchedAt((current) => {
+                    const currentTime = new Date(current).getTime();
+                    const nextTime = new Date(completedAt).getTime();
+                    return Number.isNaN(currentTime) || nextTime >= currentTime
+                      ? completedAt
+                      : current;
+                  });
+                }
                 if (preferences.lastRefreshError) {
                   setRefreshStatus("Cached data");
                 }
