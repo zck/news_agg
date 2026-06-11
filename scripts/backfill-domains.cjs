@@ -4,7 +4,7 @@
  * Backfill the 14-domain taxonomy + secondary domains for existing articles.
  *
  * Usage:
- *   node scripts/backfill-domains.cjs --db /path/to/tech-command-center.sqlite
+ *   node scripts/backfill-domains.cjs --db /path/to/news-agg.sqlite
  *   node scripts/backfill-domains.cjs                       # uses $APP_DATA_DB if set
  *
  * Requires a running Ollama server (OLLAMA_BASE_URL, default http://localhost:11434)

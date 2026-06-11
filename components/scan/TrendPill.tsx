@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/components/scan/TrendPill.tsx
 
 "use client";
 

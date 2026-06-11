@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/lib/sources.ts
 
 import { ArticleDomain } from "@/lib/types";
 

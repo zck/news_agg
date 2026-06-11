@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/components/scan/DomainChip.tsx
 
 "use client";
 

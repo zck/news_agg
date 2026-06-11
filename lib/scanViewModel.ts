@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/lib/scanViewModel.ts
 
 import { clusterArticles } from "@/lib/clustering";
 import type { Article, ArticleDomain, ExtractedEntity, StoryCluster } from "@/lib/types";

@@ -1,8 +1,8 @@
 module.exports = {
   packagerConfig: {
     asar: true,
-    name: "Tech Command Center",
-    executableName: "tech-command-center",
+    name: "News Agg",
+    executableName: "news-agg",
     ignore: [
       /^\/\.next/,
       /^\/certificates/,

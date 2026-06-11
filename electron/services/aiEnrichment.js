@@ -1,5 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/electron/services/aiEnrichment.js
-
 /**
  * AI enrichment for the Electron desktop pipeline.
  * Calls a local Ollama instance (or compatible OpenAI-style API) to:

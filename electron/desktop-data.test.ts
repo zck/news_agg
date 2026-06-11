@@ -35,7 +35,17 @@ const {
   exportSnapshot,
   importSnapshot,
 } = require("./services/importExportService");
-const { createRefreshService, fetchAllFeeds } = require("./services/refreshService");
+const {
+  getMemoryState,
+  markDomainViewed,
+  saveNarrativeThreads,
+  snapshotClusters,
+} = require("./repositories/memoryRepo");
+const {
+  createRefreshService,
+  fetchAllFeeds,
+  normalizeItem,
+} = require("./services/refreshService");
 
 const dbs: Array<unknown> = [];
 
@@ -81,6 +91,15 @@ function unconstrainedResourceMonitor() {
   };
 }
 
+function noOpRefreshEnrichers() {
+  return {
+    fullTextEnricher: null,
+    aiEnricher: null,
+    resetAiAvailability: () => {},
+    maxExtractionArticles: 0,
+  };
+}
+
 afterEach(() => {
   while (dbs.length) {
     dbs.pop()?.close();
@@ -95,7 +114,7 @@ describe("Electron Phase 2 local data layer", () => {
     const version = db.prepare("SELECT max(version) AS version FROM schema_version").get();
     const articles = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'articles'").get();
 
-    expect(version.version).toBe(4);
+    expect(version.version).toBe(5);
     expect(articles.name).toBe("articles");
   });
 
@@ -172,7 +191,7 @@ describe("Electron Phase 2 local data layer", () => {
     const clean = rows.find((r: any) => r.id === "clean-domain");
 
     expect(legacy.domain).toBe("Semis");
-    expect(legacy.domainSecondary).toEqual(["AI", "Policy"]);
+    expect(legacy.domainSecondary).toEqual(["LLM", "Policy"]);
     expect(clean.domain).toBe("Climate");
     expect(clean.domainSecondary).toEqual(["Batteries"]);
   });
@@ -200,8 +219,8 @@ describe("Electron Phase 2 local data layer", () => {
     const self = rows.find((r: any) => r.id === "self-secondary");
 
     expect(unknown.domain).toBe("General");
-    expect(unknown.domainSecondary).toEqual(["AI"]);
-    expect(self.domain).toBe("AI");
+    expect(unknown.domainSecondary).toEqual(["LLM"]);
+    expect(self.domain).toBe("LLM");
     expect(self.domainSecondary).toEqual(["Semis"]);
   });
 
@@ -270,13 +289,55 @@ describe("Electron Phase 2 local data layer", () => {
     const filePath = path.join(tmpDir, "snapshot.json");
 
     upsertArticles(sourceDb, [sampleArticle()]);
+    saveUserFeedback(sourceDb, {
+      clusterId: "cluster-openai-infra",
+      action: "boost",
+      cluster: {
+        id: "cluster-openai-infra",
+        tags: ["ai_infrastructure"],
+        entities: [{ name: "OpenAI", normalized: "openai" }],
+        impactScore: 6,
+      },
+    });
+    snapshotClusters(sourceDb, [
+      {
+        id: "cluster-openai-infra",
+        headline: "OpenAI infra expands",
+        summary: "OpenAI and partners add more data center capacity.",
+        domain: "AIInfra",
+        domainSecondary: ["LLM"],
+        tags: ["ai_infrastructure"],
+        articleIds: ["article-1"],
+        sources: ["Test Source"],
+        sourceCount: 1,
+        confidence: "medium",
+        impactScore: 6,
+        firstSeenAt: "2026-04-18T12:00:00.000Z",
+        lastSeenAt: "2026-04-18T12:00:00.000Z",
+      },
+    ], { snapshotAt: "2026-04-18T12:00:00.000Z" });
+    saveNarrativeThreads(sourceDb, [
+      {
+        id: "thread-openai-infra",
+        title: "OpenAI infra",
+        startedAt: "2026-04-18T12:00:00.000Z",
+        lastUpdatedAt: "2026-04-18T12:00:00.000Z",
+        clusterIds: ["cluster-openai-infra"],
+      },
+    ]);
+    markDomainViewed(sourceDb, "AIInfra", "2026-04-18T12:00:00.000Z");
     await exportSnapshot(sourceDb, filePath);
     const result = await importSnapshot(targetDb, filePath);
     const snapshot = createSnapshot(targetDb);
+    const memory = getMemoryState(targetDb);
 
     expect(result.success).toBe(true);
     expect(snapshot.data.articles).toHaveLength(1);
     expect(snapshot.data.articles[0].url).toBe("https://example.com/openai-infra");
+    expect(snapshot.data.user_feedback).toHaveLength(1);
+    expect(snapshot.data.user_affinity.some((row: any) => row.key === "openai")).toBe(true);
+    expect(memory.latestSnapshots["cluster-openai-infra"].articleCount).toBe(1);
+    expect(memory.domainViewStates.AIInfra.lastViewedAt).toBe("2026-04-18T12:00:00.000Z");
   });
 
   it("prevents overlapping refresh jobs", async () => {
@@ -285,6 +346,7 @@ describe("Electron Phase 2 local data layer", () => {
     const refreshService = createRefreshService({
       db,
       resourceMonitor: unconstrainedResourceMonitor(),
+      ...noOpRefreshEnrichers(),
       fetchAllFeeds: () =>
         new Promise((resolve) => {
           releaseFetch = () =>
@@ -313,6 +375,7 @@ describe("Electron Phase 2 local data layer", () => {
     const refreshService = createRefreshService({
       db,
       getPowerState: () => ({ source: "battery", onBattery: true }),
+      ...noOpRefreshEnrichers(),
       fetchAllFeeds: () => {
         fetched = true;
         return Promise.resolve([{ articles: [sampleArticle()], error: null }]);
@@ -346,6 +409,7 @@ describe("Electron Phase 2 local data layer", () => {
     };
     const refreshService = createRefreshService({
       db,
+      ...noOpRefreshEnrichers(),
       resourceMonitor: {
         getMemoryState: () => memoryState,
         waitForMemoryRecovery: () =>
@@ -388,6 +452,7 @@ describe("Electron Phase 2 local data layer", () => {
     };
     const refreshService = createRefreshService({
       db,
+      ...noOpRefreshEnrichers(),
       resourceMonitor: {
         getMemoryState: () => memoryState,
         waitForMemoryRecovery: () => Promise.resolve({ waitedMs: 10, memoryState }),
@@ -414,7 +479,7 @@ describe("Electron Phase 2 local data layer", () => {
     const sourceList = Array.from({ length: 7 }, (_value, index) => ({
       name: `Source ${index}`,
       url: `https://example.com/${index}`,
-      category: "AI",
+      category: "LLM",
     }));
 
     const results = await fetchAllFeeds(
@@ -440,6 +505,23 @@ describe("Electron Phase 2 local data layer", () => {
     expect(results).toHaveLength(sourceList.length);
   });
 
+  it("falls back to the current time for malformed feed dates", () => {
+    const article = normalizeItem(
+      { name: "Bad Date Feed", category: "LLM" },
+      {
+        title: "Malformed date item",
+        link: "https://example.com/bad-date",
+        isoDate: "not-a-date",
+        contentSnippet: "The feed published a bad date.",
+      },
+      {},
+    );
+
+    expect(article).not.toBeNull();
+    expect(article.published_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(article.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("tracks incoming article counts and refresh resource impact", async () => {
     const db = createDb();
     const resourceImpact = {
@@ -458,6 +540,7 @@ describe("Electron Phase 2 local data layer", () => {
     const refreshService = createRefreshService({
       db,
       getPowerState: () => ({ source: "battery", onBattery: true }),
+      ...noOpRefreshEnrichers(),
       resourceMonitor: {
         start: () => "sample",
         finish: (sample) => (sample === "sample" ? resourceImpact : null),
@@ -501,7 +584,7 @@ describe("Electron Phase 2 local data layer", () => {
         id: "article-2",
         headline: "Graphene commercialization reaches pilot scale",
         summary: "Battery materials companies announced a new manufacturing line.",
-        domain: "Energy",
+        domain: "Climate",
         source: "Materials Weekly",
         url: "https://example.com/graphene",
         importance: 4,
@@ -529,7 +612,7 @@ describe("Electron Phase 2 local data layer", () => {
         id: "article-2",
         headline: "AI chip packaging suppliers add capacity",
         summary: "Advanced packaging capacity expands for accelerators.",
-        domain: "Chips",
+        domain: "Semis",
         source: "Chip Wire",
         url: "https://example.com/chips",
         importance: 3,
@@ -553,7 +636,7 @@ describe("Electron Phase 2 local data layer", () => {
 
     const results = querySearch(db, {
       q: "ai chips regulation",
-      domains: ["AI", "Bio"],
+      domains: ["LLM", "Bio"],
       tags: ["regulation"],
       dateFrom: "2026-04-01",
       dateTo: "2026-04-30",
@@ -593,7 +676,7 @@ describe("Electron Phase 2 local data layer", () => {
         id: "article-3",
         headline: "Graphene battery manufacturing update",
         summary: "Materials companies announced new pilots.",
-        domain: "Energy",
+        domain: "Climate",
         source: "Materials Weekly",
         url: "https://example.com/unrelated",
         importance: 5,

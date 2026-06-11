@@ -12,16 +12,22 @@ const {
   getPatternRows,
 } = require("../repositories/patternsRepo");
 const {
+  getAffinityRows,
   getFeedbackRows,
   getLearningRows,
   getPreferenceRows,
+  getRuleRows,
+  getUserFeedbackRows,
 } = require("../repositories/preferencesRepo");
+const { getMemoryRows } = require("../repositories/memoryRepo");
 
 function createSnapshot(db) {
+  const memory = getMemoryRows(db);
+
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    app: "tech-command-center",
+    app: "news-agg",
     data: {
       articles: getArticles(db, { limit: 1000 }),
       articleRows: getRawArticleRows(db),
@@ -31,8 +37,16 @@ function createSnapshot(db) {
       briefs: getBriefRows(db),
       insights: getInsightRows(db),
       feedback: getFeedbackRows(db),
+      user_feedback: getUserFeedbackRows(db),
+      user_affinity: getAffinityRows(db),
+      rules: getRuleRows(db),
       learning_profile: getLearningRows(db),
       preferences: getPreferenceRows(db),
+      cluster_history: memory.clusterHistory,
+      narrative_threads: memory.narrativeThreads,
+      narrative_thread_clusters: memory.narrativeThreadClusters,
+      cluster_view_state: memory.clusterViewState,
+      domain_view_state: memory.domainViewState,
     },
   };
 }
@@ -102,9 +116,50 @@ const MERGE_TABLE_SCHEMAS = {
     keyColumns: ["article_id"],
     allowedColumns: ["article_id", "original_importance", "user_importance", "updated_at"],
   },
+  user_feedback: {
+    keyColumns: ["id"],
+    allowedColumns: ["id", "cluster_id", "action", "value", "created_at"],
+  },
+  user_affinity: {
+    keyColumns: ["key"],
+    allowedColumns: ["key", "type", "score", "updated_at"],
+  },
+  rules: {
+    keyColumns: ["id"],
+    allowedColumns: ["id", "type", "field", "value", "weight"],
+  },
   briefs: {
     keyColumns: ["week"],
     allowedColumns: ["week", "content_json", "created_at"],
+  },
+  cluster_history: {
+    keyColumns: ["id"],
+    allowedColumns: [
+      "id",
+      "cluster_id",
+      "snapshot_at",
+      "article_count",
+      "summary_json",
+      "importance_score",
+      "primary_domain",
+      "secondary_domains_json",
+    ],
+  },
+  narrative_threads: {
+    keyColumns: ["id"],
+    allowedColumns: ["id", "title", "started_at", "last_updated_at", "summary_json"],
+  },
+  narrative_thread_clusters: {
+    keyColumns: ["thread_id", "cluster_id"],
+    allowedColumns: ["thread_id", "cluster_id", "added_at"],
+  },
+  cluster_view_state: {
+    keyColumns: ["cluster_id"],
+    allowedColumns: ["cluster_id", "last_viewed_at"],
+  },
+  domain_view_state: {
+    keyColumns: ["domain"],
+    allowedColumns: ["domain", "last_viewed_at", "collapsed"],
   },
 };
 
@@ -177,8 +232,16 @@ async function importSnapshot(db, filePath) {
     const articleResult = upsertArticles(db, data.articles ?? data.articleRows ?? []);
     mergeRawRows(db, "preferences", data.preferences);
     mergeRawRows(db, "learning_profile", data.learning_profile);
-    mergeRawRows(db, "importance_feedback", data.feedback);
+    mergeRawRows(db, "importance_feedback", data.feedback ?? data.importance_feedback);
+    mergeRawRows(db, "user_feedback", data.user_feedback);
+    mergeRawRows(db, "user_affinity", data.user_affinity);
+    mergeRawRows(db, "rules", data.rules);
     mergeRawRows(db, "briefs", data.briefs);
+    mergeRawRows(db, "cluster_history", data.cluster_history);
+    mergeRawRows(db, "narrative_threads", data.narrative_threads);
+    mergeRawRows(db, "narrative_thread_clusters", data.narrative_thread_clusters);
+    mergeRawRows(db, "cluster_view_state", data.cluster_view_state);
+    mergeRawRows(db, "domain_view_state", data.domain_view_state);
 
     if (Array.isArray(data.insights)) {
       const insertInsight = db.prepare(`

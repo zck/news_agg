@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/electron/services/scheduler.js
 
 function createScheduler({ refreshService, getIntervalMinutes }) {
   let timer = null;

@@ -391,9 +391,22 @@ function getFeedbackRows(db) {
   return db.prepare("SELECT * FROM importance_feedback ORDER BY updated_at DESC").all();
 }
 
+function getUserFeedbackRows(db) {
+  return db.prepare("SELECT * FROM user_feedback ORDER BY created_at DESC").all();
+}
+
+function getAffinityRows(db) {
+  return db.prepare("SELECT * FROM user_affinity ORDER BY key ASC").all();
+}
+
+function getRuleRows(db) {
+  return db.prepare("SELECT * FROM rules ORDER BY id ASC").all();
+}
+
 module.exports = {
   clearLearningProfile,
   defaultPreferences,
+  getAffinityRows,
   getFeedbackRows,
   getAffinities,
   getImportanceFeedback,
@@ -405,8 +418,10 @@ module.exports = {
   getPreference,
   getPreferenceRows,
   getPreferences,
+  getRuleRows,
   getRules,
   getUserFeedback,
+  getUserFeedbackRows,
   rebuildLearningProfile,
   saveUserFeedback,
   saveImportanceFeedback,

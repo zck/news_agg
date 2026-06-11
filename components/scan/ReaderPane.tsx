@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/components/scan/ReaderPane.tsx
 
 "use client";
 

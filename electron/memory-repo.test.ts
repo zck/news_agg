@@ -75,7 +75,7 @@ describe("memoryRepo.snapshotClusters", () => {
     expect(history).toHaveLength(1);
     expect(history[0].clusterId).toBe("cluster-1");
     expect(history[0].articleCount).toBe(3);
-    expect(history[0].primaryDomain).toBe("AI");
+    expect(history[0].primaryDomain).toBe("LLM");
     expect(history[0].secondaryDomains).toEqual(["Cloud"]);
     expect(history[0].summary.headline).toContain("AI spend");
     expect(history[0].summary.tags).toEqual(["ai_infra", "capex"]);
@@ -217,17 +217,17 @@ describe("memoryRepo view states", () => {
 
   it("markDomainViewed and setDomainCollapsed are composable", () => {
     const db = createDb();
-    markDomainViewed(db, "AI", "2026-04-20T00:00:00.000Z");
-    setDomainCollapsed(db, "AI", true, "2026-04-20T00:00:00.000Z");
+    markDomainViewed(db, "LLM", "2026-04-20T00:00:00.000Z");
+    setDomainCollapsed(db, "LLM", true, "2026-04-20T00:00:00.000Z");
     const state = getDomainViewStates(db);
-    expect(state.AI.lastViewedAt).toBe("2026-04-20T00:00:00.000Z");
-    expect(state.AI.collapsed).toBe(true);
+    expect(state.LLM.lastViewedAt).toBe("2026-04-20T00:00:00.000Z");
+    expect(state.LLM.collapsed).toBe(true);
 
     // Un-collapse does not reset lastViewedAt
-    setDomainCollapsed(db, "AI", false);
+    setDomainCollapsed(db, "LLM", false);
     const state2 = getDomainViewStates(db);
-    expect(state2.AI.collapsed).toBe(false);
-    expect(state2.AI.lastViewedAt).toBe("2026-04-20T00:00:00.000Z");
+    expect(state2.LLM.collapsed).toBe(false);
+    expect(state2.LLM.lastViewedAt).toBe("2026-04-20T00:00:00.000Z");
   });
 
   it("rejects invalid domains", () => {
@@ -255,7 +255,7 @@ describe("memoryRepo.getMemoryState", () => {
       },
     ]);
     markClusterViewed(db, "cluster-1", "2026-04-19T00:00:00.000Z");
-    markDomainViewed(db, "AI", "2026-04-18T00:00:00.000Z");
+    markDomainViewed(db, "LLM", "2026-04-18T00:00:00.000Z");
 
     const state = getMemoryState(db);
     expect(state.threads).toHaveLength(1);
@@ -263,7 +263,7 @@ describe("memoryRepo.getMemoryState", () => {
     expect(state.clusterViewStates["cluster-1"]).toBe(
       "2026-04-19T00:00:00.000Z",
     );
-    expect(state.domainViewStates.AI.lastViewedAt).toBe(
+    expect(state.domainViewStates.LLM.lastViewedAt).toBe(
       "2026-04-18T00:00:00.000Z",
     );
     expect(state.latestSnapshots["cluster-1"].articleCount).toBe(3);

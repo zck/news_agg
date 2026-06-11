@@ -89,12 +89,12 @@ Repository modules under `electron/repositories/` expose explicit operations for
 The DB file is stored outside the repo under Electron's app data directory:
 
 ```text
-app.getPath("userData")/tech-command-center.sqlite
+app.getPath("userData")/news-agg.sqlite
 ```
 
 The in-app desktop settings panel shows both the app data path and DB path. The app menu also includes `Open Data Folder`.
 
-To reset local desktop data during development, quit the app and remove `tech-command-center.sqlite` from the shown data folder. The next launch recreates the schema automatically.
+To reset local desktop data during development, quit the app and remove `news-agg.sqlite` from the shown data folder. The next launch recreates the schema automatically. Existing `tech-command-center.sqlite` files are copied forward on first launch for compatibility.
 
 ### Background Refresh
 

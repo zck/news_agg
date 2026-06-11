@@ -1,5 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/electron/services/articleExtractor.js
-
 /**
  * Lightweight full-text article extractor.
  * Fetches the page HTML, strips boilerplate, and returns the article body.

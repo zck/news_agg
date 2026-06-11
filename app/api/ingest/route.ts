@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     headline: body.headline,
     summary:
       body.content?.slice(0, 180) ||
-      `Mock summary: ${body.headline} is being processed into the daily dashboard with lightweight signal extraction.`,
+      `${body.headline} is being processed into the daily dashboard with lightweight signal extraction.`,
     tags,
     importance:
       body.importance && body.importance >= 1 && body.importance <= 5

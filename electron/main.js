@@ -100,8 +100,8 @@ function productionEntry() {
         type: "html",
         value: `
           <main style="font-family: system-ui; padding: 32px; color: #0f172a;">
-            <h1>Tech Command Center</h1>
-            <p>Packaged offline assets are not configured in Phase 1.</p>
+            <h1>News Agg</h1>
+            <p>Packaged offline assets are not configured for this build.</p>
             <p>Run the Next app locally or set NEXT_APP_URL to a localhost URL.</p>
           </main>
         `,
@@ -129,7 +129,7 @@ async function loadRenderer(window) {
 async function exportPayload(payload, parentWindow) {
   const result = await dialog.showSaveDialog(parentWindow, {
     title: "Export Current Data",
-    defaultPath: `tech-command-center-${new Date().toISOString().slice(0, 10)}.json`,
+    defaultPath: `news-agg-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
 
@@ -146,7 +146,7 @@ async function exportSnapshotDialog(parentWindow) {
     title: "Export Local Data",
     defaultPath: path.join(
       app.getPath("documents"),
-      `tech-command-center-snapshot-${new Date().toISOString().slice(0, 10)}.json`,
+      `news-agg-snapshot-${new Date().toISOString().slice(0, 10)}.json`,
     ),
     filters: [{ name: "JSON", extensions: ["json"] }],
   });

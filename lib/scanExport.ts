@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/lib/scanExport.ts
 
 import { getDomainLabel, type ScanRow } from "@/lib/scanViewModel";
 

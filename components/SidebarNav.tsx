@@ -82,7 +82,7 @@ export function SidebarNav({ activePath = "/" }: SidebarNavProps) {
       <div className="surface-card p-4">
         <div className="border-b border-slate-200 pb-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">
-            Tech Command Center
+            News Agg
           </p>
           <p className="mt-2 text-sm text-slate-600">
             Daily signals, weekly shifts, structural patterns.

@@ -1,10 +1,5 @@
-// /Users/montysharma/Projects/news_agg/news_agg/lib/ingest.ts
-//
-// Key changes:
-//   - MAX_ARTICLES_PER_SOURCE: 5 → 20
-//   - MAX_DASHBOARD_ARTICLES: 30 → 300
-//   - Cache duration: 1 hour → 30 minutes
-//   - Summary length: 280 → 600 chars
+// RSS ingestion for the web renderer path. The Electron app uses
+// electron/services/refreshService.js for local SQLite refreshes.
 
 import { processArticlesInBatches } from "@/lib/ai";
 import { clusterArticles, deduplicateArticles } from "@/lib/clustering";
@@ -120,7 +115,11 @@ function normalizeItem(source: RssSource, item: Parser.Item): Article | null {
   }
 
   const rawDate = item.isoDate || item.pubDate;
-  const parsedDate = rawDate ? new Date(rawDate) : new Date();
+  const candidateDate = rawDate ? new Date(rawDate) : null;
+  const parsedDate =
+    candidateDate && !Number.isNaN(candidateDate.getTime())
+      ? candidateDate
+      : new Date();
   const date = parsedDate.toISOString().slice(0, 10);
   const processedAt = new Date().toISOString();
 

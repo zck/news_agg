@@ -1,11 +1,6 @@
-// /Users/montysharma/Projects/news_agg/news_agg/electron/services/refreshService.js
-//
-// Key changes from original:
-//   - MAX_ARTICLES_PER_SOURCE: 5 → 20
-//   - Total article cap: 60 → 500
-//   - Added full-text extraction via articleExtractor
-//   - Added AI enrichment via aiEnrichment (falls back to heuristics)
-//   - resetAiStatus() called each refresh cycle so AI re-checks availability
+// Local RSS refresh pipeline for the Electron app. Feed fetching is bounded,
+// full-text extraction and AI enrichment are injectable for tests, and every
+// run records resource/refresh metadata in SQLite.
 
 const Parser = require("rss-parser");
 const { upsertArticles, getArticles } = require("../repositories/articlesRepo");
@@ -221,7 +216,11 @@ function normalizeItem(source, item, preferences) {
   }
 
   const rawDate = item.isoDate || item.pubDate;
-  const parsedDate = rawDate ? new Date(rawDate) : new Date();
+  const candidateDate = rawDate ? new Date(rawDate) : null;
+  const parsedDate =
+    candidateDate && !Number.isNaN(candidateDate.getTime())
+      ? candidateDate
+      : new Date();
   const processedAt = new Date().toISOString();
   const summary = createSummary(item);
   const tags = inferTags(`${headline} ${summary}`);
@@ -254,7 +253,7 @@ async function fetchFeed(source, preferences, { maxFeedBytes = MAX_FEED_BYTES } 
     const response = await fetch(source.url, {
       headers: {
         Accept: "application/rss+xml, application/xml, text/xml",
-        "User-Agent": "tech-command-center-desktop/2.0",
+        "User-Agent": "news-agg-desktop/2.0",
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -362,6 +361,10 @@ function createRefreshService({
   notificationService,
   onComplete,
   fetchAllFeeds: fetchAllFeedsOverride,
+  fullTextEnricher = enrichArticlesWithFullText,
+  aiEnricher = enrichArticlesWithAI,
+  resetAiAvailability = resetAiStatus,
+  maxExtractionArticles = MAX_EXTRACTION_ARTICLES,
   getPowerState,
   resourceMonitor = createResourceMonitor(),
   shouldSuspendRefresh = (_options, powerState) => Boolean(powerState?.onBattery),
@@ -460,8 +463,8 @@ function createRefreshService({
         return nextResult;
       }
 
-      // ── Reset AI status so it re-checks availability each cycle ──
-      resetAiStatus();
+      // Reset AI status so it re-checks availability each cycle.
+      resetAiAvailability();
 
       const preferences = getPreferences(db);
       const settled = await (fetchAllFeedsOverride ?? fetchAllFeeds)(preferences, {
@@ -486,29 +489,34 @@ function createRefreshService({
         });
       }
 
-      // ── Phase 2: Full-text extraction on top articles ──
+      // Full-text extraction on top articles.
       const sortedForExtraction = [...articles]
         .sort((a, b) => (b.importance - a.importance) || (new Date(b.published_at).getTime() - new Date(a.published_at).getTime()));
-      const toExtract = sortedForExtraction.slice(0, MAX_EXTRACTION_ARTICLES);
-      const skipExtract = sortedForExtraction.slice(MAX_EXTRACTION_ARTICLES);
+      const extractionLimit = Math.max(0, Number(maxExtractionArticles) || 0);
+      const toExtract = sortedForExtraction.slice(0, extractionLimit);
+      const skipExtract = sortedForExtraction.slice(extractionLimit);
 
-      try {
-        const extracted = await enrichArticlesWithFullText(toExtract);
-        articles = [...extracted, ...skipExtract];
-        console.log(`[refresh] Full-text extraction completed for ${toExtract.length} articles`);
-      } catch (extractError) {
-        console.warn(`[refresh] Full-text extraction failed: ${extractError instanceof Error ? extractError.message : "Unknown"}`);
+      if (toExtract.length && fullTextEnricher) {
+        try {
+          const extracted = await fullTextEnricher(toExtract);
+          articles = [...extracted, ...skipExtract];
+          console.log(`[refresh] Full-text extraction completed for ${toExtract.length} articles`);
+        } catch (extractError) {
+          console.warn(`[refresh] Full-text extraction failed: ${extractError instanceof Error ? extractError.message : "Unknown"}`);
+        }
       }
 
-      // ── Phase 3: AI enrichment (domain, tags, importance, summary) ──
-      try {
-        articles = await enrichArticlesWithAI(articles);
-        console.log(`[refresh] AI enrichment completed`);
-      } catch (aiError) {
-        console.warn(`[refresh] AI enrichment failed: ${aiError instanceof Error ? aiError.message : "Unknown"}`);
+      // AI enrichment for domain, tags, importance, and summary.
+      if (aiEnricher) {
+        try {
+          articles = await aiEnricher(articles);
+          console.log(`[refresh] AI enrichment completed`);
+        } catch (aiError) {
+          console.warn(`[refresh] AI enrichment failed: ${aiError instanceof Error ? aiError.message : "Unknown"}`);
+        }
       }
 
-      // ── Phase 4: Save and generate patterns/briefs ──
+      // Save and generate patterns/briefs.
       const result = upsertArticles(db, articles);
       const latestArticles = getArticles(db, { limit: 500 });
       const patterns = getPatterns(db, { limit: 500 });

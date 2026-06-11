@@ -1,4 +1,3 @@
-// /Users/montysharma/Projects/news_agg/news_agg/lib/clusterRatings.ts
 //
 // Cluster-keyed interest ratings, persisted to localStorage. Solves the
 // "lead drift" problem: when the lead article of a cluster changes between
