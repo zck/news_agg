@@ -5,6 +5,13 @@ const defaultPreferences = {
   personalizedDefault: false,
 };
 
+const defaultScanState = {
+  teachingIds: [],
+  digest: false,
+  clusterRatings: {},
+  updatedAt: null,
+};
+
 function safeParse(value, fallback = null) {
   try {
     return value ? JSON.parse(value) : fallback;
@@ -96,6 +103,28 @@ function setLastRefreshStats(db, value) {
   }
 
   db.prepare("DELETE FROM preferences WHERE key = ?").run("lastRefreshStats");
+}
+
+function getScanState(db) {
+  const stored = getPreference(db, "scanState", defaultScanState);
+  return {
+    ...defaultScanState,
+    ...(stored && typeof stored === "object" ? stored : {}),
+  };
+}
+
+function saveScanState(db, next) {
+  const state = {
+    teachingIds: Array.isArray(next?.teachingIds) ? next.teachingIds : [],
+    digest: Boolean(next?.digest),
+    clusterRatings:
+      next?.clusterRatings && typeof next.clusterRatings === "object"
+        ? next.clusterRatings
+        : {},
+    updatedAt: new Date().toISOString(),
+  };
+  savePreference(db, "scanState", state);
+  return state;
 }
 
 function getImportanceFeedback(db) {
@@ -405,6 +434,7 @@ function getRuleRows(db) {
 
 module.exports = {
   clearLearningProfile,
+  defaultScanState,
   defaultPreferences,
   getAffinityRows,
   getFeedbackRows,
@@ -420,6 +450,7 @@ module.exports = {
   getPreferences,
   getRuleRows,
   getRules,
+  getScanState,
   getUserFeedback,
   getUserFeedbackRows,
   rebuildLearningProfile,
@@ -427,6 +458,7 @@ module.exports = {
   saveImportanceFeedback,
   savePreference,
   savePreferences,
+  saveScanState,
   setLastRefresh,
   setLastRefreshError,
   setLastRefreshStats,

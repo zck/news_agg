@@ -74,6 +74,13 @@ declare global {
     };
   };
 
+  type DesktopScanState = {
+    teachingIds: string[];
+    digest: boolean;
+    clusterRatings: import("@/lib/clusterRatings").ClusterRatingStore;
+    updatedAt?: string | null;
+  };
+
   type SearchInput = {
     q: string;
     domains?: string[];
@@ -264,6 +271,14 @@ declare global {
       };
       preferences: {
         onChanged: (callback: (payload: DesktopPreferences) => void) => () => void;
+      };
+      scan?: {
+        getState: () => Promise<DesktopScanState>;
+        saveState: (payload: DesktopScanState) => Promise<{
+          success: boolean;
+          state?: DesktopScanState;
+          error?: string;
+        }>;
       };
       memory: {
         getState: () => Promise<DesktopMemoryLayerState>;

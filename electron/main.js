@@ -16,9 +16,11 @@ const {
   getLearningProfile,
   getPreferences,
   getRules,
+  getScanState,
   getUserFeedback,
   saveImportanceFeedback,
   savePreferences,
+  saveScanState,
   saveUserFeedback,
 } = require("./repositories/preferencesRepo");
 const {
@@ -60,6 +62,7 @@ const {
   sanitizeMemoryDomain,
   sanitizeMemorySnapshotPayload,
   sanitizeDomainCollapsePayload,
+  sanitizeScanStatePayload,
 } = require("./ipcValidate");
 
 const DEV_SERVER_URL = process.env.ELECTRON_RENDERER_URL ?? "http://127.0.0.1:3000";
@@ -457,6 +460,20 @@ ipcMain.handle("desktop:data:savePreferences", (_event, payload = {}) => {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Invalid preferences",
+    };
+  }
+});
+
+ipcMain.handle("desktop:scan:getState", () => getScanState(desktopDb));
+
+ipcMain.handle("desktop:scan:saveState", (_event, payload = {}) => {
+  try {
+    const state = saveScanState(desktopDb, sanitizeScanStatePayload(payload));
+    return { success: true, state };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Invalid scan state",
     };
   }
 });

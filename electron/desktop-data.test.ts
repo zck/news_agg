@@ -26,8 +26,10 @@ const {
   getLastRefreshStats,
   getImportanceFeedback,
   getRules,
+  getScanState,
   getUserFeedback,
   saveImportanceFeedback,
+  saveScanState,
   saveUserFeedback,
 } = require("./repositories/preferencesRepo");
 const {
@@ -258,6 +260,27 @@ describe("Electron Phase 2 local data layer", () => {
 
     expect(result.success).toBe(true);
     expect(feedback["article-1"].userImportance).toBe(3);
+  });
+
+  it("persists scan teaching state in local preferences", () => {
+    const db = createDb();
+    const saved = saveScanState(db, {
+      teachingIds: ["cluster-openai-infra", "cluster-chip-packaging"],
+      digest: true,
+      clusterRatings: {
+        "article-1|article-2": {
+          interest: 4,
+          ratedAt: "2026-04-18T12:00:00.000Z",
+          memberIds: ["article-1", "article-2"],
+        },
+      },
+    });
+    const stored = getScanState(db);
+
+    expect(saved.updatedAt).toEqual(expect.any(String));
+    expect(stored.teachingIds).toEqual(["cluster-openai-infra", "cluster-chip-packaging"]);
+    expect(stored.digest).toBe(true);
+    expect(stored.clusterRatings["article-1|article-2"].interest).toBe(4);
   });
 
   it("persists cluster feedback and updates affinities", () => {

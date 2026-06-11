@@ -3,6 +3,7 @@ const MAX_SEARCH_QUERY = 500;
 const MAX_TAG_LEN = 120;
 const MAX_NAME = 200;
 const MAX_ARRAY = 50;
+const MAX_SCAN_ITEMS = 500;
 
 function clampString(value, max = MAX_STRING) {
   if (typeof value !== "string") return undefined;
@@ -24,6 +25,16 @@ function clampStringArray(value, maxLen = MAX_TAG_LEN) {
   if (!Array.isArray(value)) return [];
   const out = [];
   for (const item of value.slice(0, MAX_ARRAY)) {
+    const s = clampString(item, maxLen);
+    if (s !== undefined) out.push(s);
+  }
+  return out;
+}
+
+function clampStringArrayWithLimit(value, maxLen, maxItems) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const item of value.slice(0, maxItems)) {
     const s = clampString(item, maxLen);
     if (s !== undefined) out.push(s);
   }
@@ -240,6 +251,33 @@ function sanitizePreferences(input) {
   };
 }
 
+function sanitizeScanStatePayload(input) {
+  const src = pickObject(input);
+  const rawRatings = pickObject(src.clusterRatings);
+  const clusterRatings = {};
+
+  for (const [rawKey, rawRating] of Object.entries(rawRatings).slice(0, MAX_SCAN_ITEMS)) {
+    const key = clampString(rawKey, 2000);
+    const rating = pickObject(rawRating);
+    const interest = clampNumber(rating.interest, { min: 1, max: 4 });
+    const memberIds = clampStringArrayWithLimit(rating.memberIds, 256, 50);
+
+    if (!key || !interest || !memberIds.length) continue;
+
+    clusterRatings[key] = {
+      interest,
+      ratedAt: clampString(rating.ratedAt, 40) ?? new Date().toISOString(),
+      memberIds,
+    };
+  }
+
+  return {
+    teachingIds: clampStringArrayWithLimit(src.teachingIds, 256, MAX_SCAN_ITEMS),
+    digest: Boolean(src.digest),
+    clusterRatings,
+  };
+}
+
 module.exports = {
   clampString,
   clampNumber,
@@ -253,6 +291,7 @@ module.exports = {
   sanitizeImportanceFeedback,
   sanitizeUserFeedback,
   sanitizePreferences,
+  sanitizeScanStatePayload,
   sanitizeClusterIdValue,
   sanitizeMemoryDomain,
   sanitizeMemorySnapshotPayload,

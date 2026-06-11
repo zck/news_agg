@@ -40,6 +40,24 @@ import {
 } from "@/lib/scanViewModel";
 import type { Article, ArticleDomain, ImportanceFeedback } from "@/lib/types";
 
+const TEACHING_STORAGE_KEY = "scan.teaching.v1";
+const DIGEST_STORAGE_KEY = "scan.digest.v1";
+const CLUSTER_RATING_STORAGE_KEY = "scan.cluster-rating.v1";
+
+function readLocalStorageJson<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function uniqueIds(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 // Two-pass localStorage hook — avoids SSR/hydration mismatch.
 function usePersisted<T>(key: string, initial: T): [T, Dispatch<SetStateAction<T>>] {
   const [val, setVal] = useState<T>(initial);
@@ -90,13 +108,14 @@ export function ScanTerminal() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [teaching, setTeaching] = usePersisted<string[]>("scan.teaching.v1", []);
-  const [digest, setDigest] = usePersisted<boolean>("scan.digest.v1", false);
+  const [teaching, setTeaching] = usePersisted<string[]>(TEACHING_STORAGE_KEY, []);
+  const [digest, setDigest] = usePersisted<boolean>(DIGEST_STORAGE_KEY, false);
+  const [desktopScanLoaded, setDesktopScanLoaded] = useState(false);
   // Cluster-keyed ratings — survive lead drift and partial cluster reshapes.
   // Display reads from this first, falling back to article-level importance
   // (which still drives the learning system).
   const [clusterRatings, setClusterRatings] = usePersisted<ClusterRatingStore>(
-    "scan.cluster-rating.v1",
+    CLUSTER_RATING_STORAGE_KEY,
     {},
   );
 
@@ -115,19 +134,33 @@ export function ScanTerminal() {
     setLoading(true);
     try {
       if (typeof window !== "undefined" && window.desktop) {
-        const [localArticles, storedFeedback] = await Promise.all([
+        const [localArticles, storedFeedback, storedScanState] = await Promise.all([
           window.desktop.data.getArticles({ limit: 500 }),
           window.desktop.data.getImportanceFeedback(),
+          window.desktop.scan?.getState() ?? Promise.resolve(null),
         ]);
         setArticles(localArticles);
         setFeedbackMap(storedFeedback);
         saveLearningProfile(rebuildLearningProfile(localArticles, storedFeedback));
-        // Prune teaching pack ids whose articles no longer exist.
+
         const liveIds = new Set(localArticles.map((a) => a.id));
-        setTeaching((prev) => {
-          const next = prev.filter((id) => liveIds.has(id));
-          return next.length === prev.length ? prev : next;
-        });
+        const localTeaching = readLocalStorageJson<string[]>(TEACHING_STORAGE_KEY, []);
+        const storedTeaching = storedScanState?.teachingIds ?? [];
+        const teachingSource = storedScanState?.updatedAt
+          ? storedTeaching
+          : uniqueIds([...storedTeaching, ...localTeaching]);
+        setTeaching(teachingSource.filter((id) => liveIds.has(id)));
+
+        if (storedScanState?.updatedAt) {
+          setDigest(storedScanState.digest);
+          setClusterRatings(storedScanState.clusterRatings ?? {});
+        } else {
+          setDigest(readLocalStorageJson<boolean>(DIGEST_STORAGE_KEY, false));
+          setClusterRatings(
+            readLocalStorageJson<ClusterRatingStore>(CLUSTER_RATING_STORAGE_KEY, {}),
+          );
+        }
+        setDesktopScanLoaded(true);
       } else {
         setFeedbackMap(loadImportanceFeedback());
       }
@@ -137,7 +170,7 @@ export function ScanTerminal() {
     } finally {
       setLoading(false);
     }
-  }, [setTeaching]);
+  }, [setClusterRatings, setDigest, setTeaching]);
 
   useEffect(() => {
     void loadData();
@@ -150,6 +183,22 @@ export function ScanTerminal() {
     });
     return unsub;
   }, [loadData]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.desktop?.scan || !desktopScanLoaded) return;
+    const timeout = window.setTimeout(() => {
+      void window.desktop?.scan?.saveState({
+        teachingIds: teaching,
+        digest,
+        clusterRatings,
+      }).catch((error) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[scan] saveState failed", error);
+        }
+      });
+    }, 150);
+    return () => window.clearTimeout(timeout);
+  }, [clusterRatings, desktopScanLoaded, digest, teaching]);
 
   // ── View-model ──
   // Cluster grouping is O(n²) and depends only on which articles are present —

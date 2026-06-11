@@ -66,6 +66,10 @@ contextBridge.exposeInMainWorld("desktop", {
       return () => ipcRenderer.removeListener("desktop:preferencesChanged", listener);
     },
   },
+  scan: {
+    getState: () => ipcRenderer.invoke("desktop:scan:getState"),
+    saveState: (payload) => ipcRenderer.invoke("desktop:scan:saveState", payload),
+  },
   memory: {
     getState: () => ipcRenderer.invoke("desktop:memory:getState"),
     snapshotClusters: (payload) =>

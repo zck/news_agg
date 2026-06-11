@@ -1,5 +1,5 @@
 //
-// Cluster-keyed interest ratings, persisted to localStorage. Solves the
+// Cluster-keyed interest ratings, persisted by the scan UI. Solves the
 // "lead drift" problem: when the lead article of a cluster changes between
 // refreshes (e.g. a higher-importance article joins), the user's prior
 // rating for that cluster shouldn't disappear just because the row's lead
