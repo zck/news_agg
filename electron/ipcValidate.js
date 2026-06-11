@@ -21,16 +21,6 @@ function clampNumber(value, { min, max } = {}) {
   return result;
 }
 
-function clampStringArray(value, maxLen = MAX_TAG_LEN) {
-  if (!Array.isArray(value)) return [];
-  const out = [];
-  for (const item of value.slice(0, MAX_ARRAY)) {
-    const s = clampString(item, maxLen);
-    if (s !== undefined) out.push(s);
-  }
-  return out;
-}
-
 function clampStringArrayWithLimit(value, maxLen, maxItems) {
   if (!Array.isArray(value)) return [];
   const out = [];
@@ -39,6 +29,10 @@ function clampStringArrayWithLimit(value, maxLen, maxItems) {
     if (s !== undefined) out.push(s);
   }
   return out;
+}
+
+function clampStringArray(value, maxLen = MAX_TAG_LEN) {
+  return clampStringArrayWithLimit(value, maxLen, MAX_ARRAY);
 }
 
 function pickObject(value) {
@@ -265,7 +259,9 @@ function sanitizeScanStatePayload(input) {
     if (!key || !interest || !memberIds.length) continue;
 
     clusterRatings[key] = {
-      interest,
+      // Interest is a discrete 1-4 level; round so e.g. 2.5 can't slip
+      // through the range clamp and miss the renderer's === comparisons.
+      interest: Math.round(interest),
       ratedAt: clampString(rating.ratedAt, 40) ?? new Date().toISOString(),
       memberIds,
     };

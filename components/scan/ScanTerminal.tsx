@@ -108,9 +108,18 @@ export function ScanTerminal() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // In desktop mode the local DB copy of these three is authoritative (loaded
+  // in loadData); usePersisted's localStorage copy is the web-mode store and
+  // the one-time migration source.
   const [teaching, setTeaching] = usePersisted<string[]>(TEACHING_STORAGE_KEY, []);
   const [digest, setDigest] = usePersisted<boolean>(DIGEST_STORAGE_KEY, false);
   const [desktopScanLoaded, setDesktopScanLoaded] = useState(false);
+  // Serialized snapshot of the scan state last persisted to the desktop DB —
+  // lets the save effect skip writes when nothing actually changed (loads
+  // shouldn't bump updatedAt). flushScanSaveRef holds the pending debounced
+  // save so pagehide can flush it before the window goes away.
+  const lastSavedScanRef = useRef<string | null>(null);
+  const flushScanSaveRef = useRef<(() => void) | null>(null);
   // Cluster-keyed ratings — survive lead drift and partial cluster reshapes.
   // Display reads from this first, falling back to article-level importance
   // (which still drives the learning system).
@@ -137,29 +146,41 @@ export function ScanTerminal() {
         const [localArticles, storedFeedback, storedScanState] = await Promise.all([
           window.desktop.data.getArticles({ limit: 500 }),
           window.desktop.data.getImportanceFeedback(),
-          window.desktop.scan?.getState() ?? Promise.resolve(null),
+          // Scan state is auxiliary — a failed read must not block articles.
+          window.desktop.scan?.getState().catch(() => null) ?? Promise.resolve(null),
         ]);
         setArticles(localArticles);
         setFeedbackMap(storedFeedback);
         saveLearningProfile(rebuildLearningProfile(localArticles, storedFeedback));
 
-        const liveIds = new Set(localArticles.map((a) => a.id));
         const localTeaching = readLocalStorageJson<string[]>(TEACHING_STORAGE_KEY, []);
         const storedTeaching = storedScanState?.teachingIds ?? [];
         const teachingSource = storedScanState?.updatedAt
           ? storedTeaching
           : uniqueIds([...storedTeaching, ...localTeaching]);
-        setTeaching(teachingSource.filter((id) => liveIds.has(id)));
-
-        if (storedScanState?.updatedAt) {
-          setDigest(storedScanState.digest);
-          setClusterRatings(storedScanState.clusterRatings ?? {});
-        } else {
-          setDigest(readLocalStorageJson<boolean>(DIGEST_STORAGE_KEY, false));
-          setClusterRatings(
-            readLocalStorageJson<ClusterRatingStore>(CLUSTER_RATING_STORAGE_KEY, {}),
-          );
-        }
+        // Prune ids whose articles no longer exist — but never against an
+        // empty load: the DB copy is authoritative, so pruning during a
+        // transient empty article list would wipe the teaching pack for good.
+        const liveIds = new Set(localArticles.map((a) => a.id));
+        const nextTeaching = localArticles.length
+          ? teachingSource.filter((id) => liveIds.has(id))
+          : teachingSource;
+        const nextDigest = storedScanState?.updatedAt
+          ? storedScanState.digest
+          : readLocalStorageJson<boolean>(DIGEST_STORAGE_KEY, false);
+        const nextRatings = storedScanState?.updatedAt
+          ? storedScanState.clusterRatings ?? {}
+          : readLocalStorageJson<ClusterRatingStore>(CLUSTER_RATING_STORAGE_KEY, {});
+        setTeaching(nextTeaching);
+        setDigest(nextDigest);
+        setClusterRatings(nextRatings);
+        // Seed the save-effect snapshot so loading by itself doesn't rewrite
+        // scanState (updatedAt should mean "last user edit", not "last load").
+        lastSavedScanRef.current = JSON.stringify({
+          teachingIds: nextTeaching,
+          digest: nextDigest,
+          clusterRatings: nextRatings,
+        });
         setDesktopScanLoaded(true);
       } else {
         setFeedbackMap(loadImportanceFeedback());
@@ -186,19 +207,37 @@ export function ScanTerminal() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.desktop?.scan || !desktopScanLoaded) return;
-    const timeout = window.setTimeout(() => {
-      void window.desktop?.scan?.saveState({
-        teachingIds: teaching,
-        digest,
-        clusterRatings,
-      }).catch((error) => {
+    const payload = { teachingIds: teaching, digest, clusterRatings };
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedScanRef.current) {
+      // State matches what's already persisted — nothing pending to flush.
+      flushScanSaveRef.current = null;
+      return;
+    }
+    let saved = false;
+    const save = () => {
+      if (saved) return;
+      saved = true;
+      flushScanSaveRef.current = null;
+      lastSavedScanRef.current = serialized;
+      void window.desktop?.scan?.saveState(payload).catch((error) => {
         if (process.env.NODE_ENV !== "production") {
           console.warn("[scan] saveState failed", error);
         }
       });
-    }, 150);
+    };
+    flushScanSaveRef.current = save;
+    const timeout = window.setTimeout(save, 150);
     return () => window.clearTimeout(timeout);
   }, [clusterRatings, desktopScanLoaded, digest, teaching]);
+
+  // Closing the window inside the debounce window shouldn't drop the edit.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.desktop?.scan) return;
+    const flush = () => flushScanSaveRef.current?.();
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
 
   // ── View-model ──
   // Cluster grouping is O(n²) and depends only on which articles are present —

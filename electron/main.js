@@ -8,6 +8,7 @@ const {
 } = require("./repositories/articlesRepo");
 const {
   clearLearningProfile,
+  defaultScanState,
   getAffinities,
   getImportanceFeedback,
   getLastRefresh,
@@ -464,7 +465,15 @@ ipcMain.handle("desktop:data:savePreferences", (_event, payload = {}) => {
   }
 });
 
-ipcMain.handle("desktop:scan:getState", () => getScanState(desktopDb));
+ipcMain.handle("desktop:scan:getState", () => {
+  // Degrade to the default state (updatedAt: null) so the renderer falls
+  // back to its localStorage copy instead of failing the whole data load.
+  try {
+    return getScanState(desktopDb);
+  } catch {
+    return { ...defaultScanState };
+  }
+});
 
 ipcMain.handle("desktop:scan:saveState", (_event, payload = {}) => {
   try {

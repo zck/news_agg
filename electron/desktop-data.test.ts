@@ -265,7 +265,8 @@ describe("Electron Phase 2 local data layer", () => {
   it("persists scan teaching state in local preferences", () => {
     const db = createDb();
     const saved = saveScanState(db, {
-      teachingIds: ["cluster-openai-infra", "cluster-chip-packaging"],
+      // Teaching ids are article ids (the prune matches them against article.id).
+      teachingIds: ["article-1", "article-2"],
       digest: true,
       clusterRatings: {
         "article-1|article-2": {
@@ -278,7 +279,7 @@ describe("Electron Phase 2 local data layer", () => {
     const stored = getScanState(db);
 
     expect(saved.updatedAt).toEqual(expect.any(String));
-    expect(stored.teachingIds).toEqual(["cluster-openai-infra", "cluster-chip-packaging"]);
+    expect(stored.teachingIds).toEqual(["article-1", "article-2"]);
     expect(stored.digest).toBe(true);
     expect(stored.clusterRatings["article-1|article-2"].interest).toBe(4);
   });
