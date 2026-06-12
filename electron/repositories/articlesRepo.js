@@ -351,6 +351,22 @@ function getTopSignals(db, filters = {}) {
   }).slice(0, clampLimit(filters.limit, 5));
 }
 
+// Lookup keys mirroring upsertArticle's existence checks (url first, id as
+// the ON CONFLICT fallback) so the refresh pipeline can skip already-stored
+// articles before extraction/enrichment.
+function getKnownArticleKeys(db) {
+  const rows = db.prepare("SELECT id, url FROM articles").all();
+  const ids = new Set();
+  const urls = new Set();
+
+  for (const row of rows) {
+    ids.add(row.id);
+    if (row.url) urls.add(row.url);
+  }
+
+  return { ids, urls };
+}
+
 function getRawArticleRows(db) {
   return db.prepare("SELECT * FROM articles ORDER BY published_at DESC").all();
 }
@@ -366,6 +382,7 @@ function getArticleTagRows(db) {
 module.exports = {
   getArticleTagRows,
   getArticles,
+  getKnownArticleKeys,
   getOrCreateTag,
   getRawArticleRows,
   getTagRows,

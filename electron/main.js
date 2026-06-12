@@ -220,6 +220,26 @@ function getPowerState() {
   };
 }
 
+const IDLE_SUSPEND_SECONDS = 30 * 60;
+
+// Suspend scheduled refreshes on battery or when nobody has touched the
+// machine for a while — the resume hook below catches the feed up on wake.
+function shouldSuspendScheduledRefresh(options, powerState) {
+  if (powerState?.onBattery) {
+    return "battery";
+  }
+
+  if (
+    options?.scheduled &&
+    typeof powerMonitor?.getSystemIdleTime === "function" &&
+    powerMonitor.getSystemIdleTime() >= IDLE_SUSPEND_SECONDS
+  ) {
+    return "idle";
+  }
+
+  return false;
+}
+
 async function runRefreshFromMenu() {
   try {
     const result = await refreshService.runRefresh({ manual: true });
@@ -655,6 +675,7 @@ app.whenReady().then(async () => {
     db: desktopDb,
     notificationService,
     getPowerState,
+    shouldSuspendRefresh: shouldSuspendScheduledRefresh,
     onComplete: (result) => notifyRenderer("desktop:refreshComplete", result),
   });
   scheduler = createScheduler({
@@ -665,6 +686,12 @@ app.whenReady().then(async () => {
   await createWindow();
   scheduler.start();
   scheduler.runAfterDelay(2500);
+
+  // After sleep the interval timer can be hours stale — catch up once on
+  // wake. With incremental refresh a no-new-articles catch-up is nearly free.
+  powerMonitor.on("resume", () => {
+    scheduler?.runAfterDelay(5000);
+  });
 
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {

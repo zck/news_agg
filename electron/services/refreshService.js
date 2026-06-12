@@ -3,7 +3,11 @@
 // run records resource/refresh metadata in SQLite.
 
 const Parser = require("rss-parser");
-const { upsertArticles, getArticles } = require("../repositories/articlesRepo");
+const {
+  getArticles,
+  getKnownArticleKeys,
+  upsertArticles,
+} = require("../repositories/articlesRepo");
 const {
   createBrief,
   createInsights,
@@ -389,12 +393,18 @@ function createRefreshService({
       const powerState = getPowerState?.() ?? { source: "unknown", onBattery: false };
       const startedAt = new Date().toISOString();
 
-      if (!options.manual && shouldSuspendRefresh?.(options, powerState)) {
+      // shouldSuspendRefresh may return a boolean (legacy: battery) or a
+      // reason string ("battery" | "idle").
+      const suspendReason = options.manual
+        ? null
+        : shouldSuspendRefresh?.(options, powerState);
+      if (suspendReason) {
+        const skipReason = typeof suspendReason === "string" ? suspendReason : "battery";
         const skippedAt = new Date().toISOString();
         const result = {
           success: false,
           skipped: true,
-          skipReason: "battery",
+          skipReason,
           inserted: 0,
           updated: 0,
           incoming: 0,
@@ -406,7 +416,10 @@ function createRefreshService({
             ...powerState,
             suspended: true,
           },
-          error: "Auto-refresh paused while this computer is on battery power",
+          error:
+            skipReason === "idle"
+              ? "Auto-refresh paused while this computer is idle"
+              : "Auto-refresh paused while this computer is on battery power",
         };
         setLastRefreshStats(db, result);
         return result;
@@ -472,22 +485,34 @@ function createRefreshService({
       });
       memoryBreaks += Number(settled.memoryBreaks ?? 0);
 
-      let articles = dedupeByUrl(settled.flatMap((result) => result.articles))
-        .sort((left, right) => new Date(right.published_at).getTime() - new Date(left.published_at).getTime())
-        .slice(0, MAX_TOTAL_ARTICLES);
+      const fetched = dedupeByUrl(settled.flatMap((result) => result.articles));
       const errors = settled.map((result) => result.error).filter(Boolean);
 
-      if (!articles.length && errors.length) {
+      if (!fetched.length && errors.length) {
         const message = `Refresh failed: ${errors.slice(0, 3).join("; ")}`;
         setLastRefreshError(db, message);
         return complete({
           success: false,
           inserted: 0,
           updated: 0,
-          incoming: articles.length,
+          incoming: 0,
           error: message,
         });
       }
+
+      // Incremental refresh: feeds mostly re-serve articles we already hold
+      // (last measured: 478 of 500). Re-running extraction + AI enrichment on
+      // them redid ~95% of the work every cycle and overwrote prior AI output
+      // on failure, so only never-seen articles continue down the pipeline.
+      const known = getKnownArticleKeys(db);
+      const freshArticles = fetched.filter(
+        (article) =>
+          !(article.url && known.urls.has(article.url)) && !known.ids.has(article.id),
+      );
+      const skippedKnown = fetched.length - freshArticles.length;
+      let articles = freshArticles
+        .sort((left, right) => new Date(right.published_at).getTime() - new Date(left.published_at).getTime())
+        .slice(0, MAX_TOTAL_ARTICLES);
 
       // Full-text extraction on top articles.
       const sortedForExtraction = [...articles]
@@ -506,8 +531,9 @@ function createRefreshService({
         }
       }
 
-      // AI enrichment for domain, tags, importance, and summary.
-      if (aiEnricher) {
+      // AI enrichment for domain, tags, importance, and summary. Skipped
+      // entirely when nothing is new so a no-op refresh never loads the model.
+      if (articles.length && aiEnricher) {
         try {
           articles = await aiEnricher(articles);
           console.log(`[refresh] AI enrichment completed`);
@@ -543,7 +569,9 @@ function createRefreshService({
         success: true,
         inserted: result.inserted,
         updated: result.updated,
-        incoming: articles.length,
+        incoming: fetched.length,
+        fresh: articles.length,
+        skippedKnown,
         notificationCount,
         fetchedAt: refreshedAt,
         warning: errors.length ? errors.slice(0, 3).join("; ") : undefined,

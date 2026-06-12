@@ -23,9 +23,9 @@ function formatSignedNumber(value: number | undefined) {
 
 function formatArticleImpact(result: DesktopOperationResult) {
   if (result.skipped) {
-    return result.skipReason === "battery"
-      ? "Auto-refresh paused on battery"
-      : result.error ?? "Refresh skipped";
+    if (result.skipReason === "battery") return "Auto-refresh paused on battery";
+    if (result.skipReason === "idle") return "Auto-refresh paused while idle";
+    return result.error ?? "Refresh skipped";
   }
 
   const incoming = result.incoming ?? (result.inserted ?? 0) + (result.updated ?? 0);
@@ -33,7 +33,14 @@ function formatArticleImpact(result: DesktopOperationResult) {
     result.memoryBreaks && result.memoryBreaks > 0
       ? ` - ${result.memoryBreaks} memory break${result.memoryBreaks === 1 ? "" : "s"}`
       : "";
-  return `${incoming} in - ${result.inserted ?? 0} new - ${result.updated ?? 0} updated${memoryBreaks}`;
+  // Incremental refreshes report already-known articles instead of "updated"
+  // (known articles are skipped, not re-written). Older stored stats lack the
+  // field, so keep the legacy "updated" segment as the fallback.
+  const churn =
+    result.skippedKnown != null
+      ? `${result.skippedKnown} known`
+      : `${result.updated ?? 0} updated`;
+  return `${incoming} in - ${result.inserted ?? 0} new - ${churn}${memoryBreaks}`;
 }
 
 function formatResourceImpact(result: DesktopOperationResult) {

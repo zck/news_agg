@@ -416,6 +416,81 @@ describe("Electron Phase 2 local data layer", () => {
     expect(stored.skipReason).toBe("battery");
   });
 
+  it("skips scheduled refreshes when the suspend hook reports idle", async () => {
+    const db = createDb();
+    let fetched = false;
+    const refreshService = createRefreshService({
+      db,
+      ...noOpRefreshEnrichers(),
+      shouldSuspendRefresh: () => "idle",
+      fetchAllFeeds: () => {
+        fetched = true;
+        return Promise.resolve([{ articles: [sampleArticle()], error: null }]);
+      },
+    });
+
+    const result = await refreshService.runRefresh({ scheduled: true });
+    const stored = getLastRefreshStats(db);
+
+    expect(fetched).toBe(false);
+    expect(result.skipped).toBe(true);
+    expect(result.skipReason).toBe("idle");
+    expect(result.error).toContain("idle");
+    expect(stored.skipReason).toBe("idle");
+  });
+
+  it("processes only never-seen articles on subsequent refreshes", async () => {
+    const db = createDb();
+    const feedResults = [
+      {
+        articles: [
+          sampleArticle(),
+          sampleArticle({
+            id: "article-2",
+            headline: "Battery startup opens pilot factory",
+            url: "https://example.com/battery-pilot",
+            domain: "Batteries",
+          }),
+        ],
+        error: null,
+      },
+    ];
+    const enrichBatchSizes: number[] = [];
+    const refreshService = createRefreshService({
+      db,
+      resourceMonitor: unconstrainedResourceMonitor(),
+      fullTextEnricher: null,
+      resetAiAvailability: () => {},
+      maxExtractionArticles: 0,
+      aiEnricher: async (articles: any[]) => {
+        enrichBatchSizes.push(articles.length);
+        return articles.map((article) => ({
+          ...article,
+          summary: `AI summary for ${article.id}`,
+        }));
+      },
+      fetchAllFeeds: () => Promise.resolve(feedResults),
+    });
+
+    const first = await refreshService.runRefresh({ manual: true });
+    const second = await refreshService.runRefresh({ manual: true });
+    const storedArticles = getArticles(db, { limit: 10 });
+
+    expect(first.inserted).toBe(2);
+    expect(first.skippedKnown).toBe(0);
+    expect(second.success).toBe(true);
+    expect(second.inserted).toBe(0);
+    expect(second.updated).toBe(0);
+    expect(second.skippedKnown).toBe(2);
+    expect(second.incoming).toBe(2);
+    // The enricher ran once (first refresh); known articles never reached it.
+    expect(enrichBatchSizes).toEqual([2]);
+    // The second refresh must not clobber AI output with raw feed values.
+    expect(storedArticles.find((a: any) => a.id === "article-1")?.summary).toBe(
+      "AI summary for article-1",
+    );
+  });
+
   it("takes a memory break and continues when pressure is recoverable", async () => {
     const db = createDb();
     let fetched = false;

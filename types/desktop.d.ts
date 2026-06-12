@@ -44,11 +44,13 @@ declare global {
     inserted?: number;
     updated?: number;
     incoming?: number;
+    fresh?: number;
+    skippedKnown?: number;
     fetchedAt?: string;
     startedAt?: string;
     completedAt?: string;
     trigger?: "manual" | "scheduled" | "launch";
-    skipReason?: "battery" | "running" | "memory";
+    skipReason?: "battery" | "idle" | "running" | "memory";
     power?: DesktopPowerState;
     resourceImpact?: DesktopResourceImpact | null;
     error?: string;

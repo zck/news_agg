@@ -12,6 +12,11 @@
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const AI_MODEL = process.env.AI_ARTICLE_MODEL || "gemma4:26b";
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 45000;
+// Optional keep_alive for enrichment calls (e.g. "2m"); unset uses Ollama's
+// default. Set AI_KEEP_MODEL_LOADED=1 to skip the post-enrichment unload
+// (e.g. if you use the same model interactively between refreshes).
+const AI_KEEP_ALIVE = process.env.AI_KEEP_ALIVE;
+const KEEP_MODEL_LOADED = process.env.AI_KEEP_MODEL_LOADED === "1";
 const BATCH_SIZE = 6;
 const PAUSE_BETWEEN_BATCHES_MS = 300;
 
@@ -177,6 +182,10 @@ async function callOllama(articles) {
     },
   };
 
+  if (AI_KEEP_ALIVE) {
+    body.keep_alive = AI_KEEP_ALIVE;
+  }
+
   const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -193,6 +202,29 @@ async function callOllama(articles) {
   if (payload.error) throw new Error(`Ollama: ${payload.error}`);
 
   return extractJson(payload.message?.content ?? "");
+}
+
+/**
+ * Ask Ollama to unload the enrichment model. gemma4:26b holds ~17 GB resident
+ * and otherwise lingers for the keep_alive window after the last batch — on a
+ * laptop that's continued memory pressure (and swap) after the refresh is
+ * done. Per Ollama's API, empty messages + keep_alive: 0 unloads the model.
+ * Best-effort: failures are ignored.
+ */
+async function unloadModel() {
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: AI_MODEL, messages: [], keep_alive: 0 }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (response.ok) {
+      console.log(`[ai-enrich] Requested unload of ${AI_MODEL}`);
+    }
+  } catch {
+    // Best-effort only.
+  }
 }
 
 /**
@@ -213,11 +245,13 @@ async function enrichArticlesWithAI(articles) {
   const results = [...articles];
   let aiSuccessCount = 0;
   let aiFailCount = 0;
+  let attemptedOllama = false;
 
   for (let i = 0; i < results.length; i += BATCH_SIZE) {
     const batch = results.slice(i, i + BATCH_SIZE);
 
     try {
+      attemptedOllama = true;
       const parsed = await callOllama(batch);
       const aiArticles = parsed?.articles ?? [];
 
@@ -270,6 +304,10 @@ async function enrichArticlesWithAI(articles) {
     }
   }
 
+  if (attemptedOllama && !KEEP_MODEL_LOADED) {
+    await unloadModel();
+  }
+
   console.log(`[ai-enrich] Enriched ${aiSuccessCount} articles via AI, ${aiFailCount} fell back to heuristics`);
   return results;
 }
@@ -285,4 +323,5 @@ module.exports = {
   enrichArticlesWithAI,
   checkAiAvailability,
   resetAiStatus,
+  unloadModel,
 };
