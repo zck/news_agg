@@ -5,10 +5,33 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const { clampStringArray, sanitizeScanStatePayload } = require("./ipcValidate");
 
+const wellFormedTeachingItem = {
+  id: "article-1",
+  addedAt: "2026-04-18T12:00:00.000Z",
+  memberIds: ["article-1", "article-2"],
+  domain: "Semis",
+  headline: "AI chip packaging suppliers add capacity",
+  summary: "Advanced packaging capacity expands for accelerators.",
+  source: "TechWire",
+  url: "https://example.com/chips",
+  date: "2026-04-18T09:00:00.000Z",
+  tags: ["chips", "advanced_packaging"],
+  impact: 8,
+  confidence: "high",
+  sourceCount: 3,
+  articleCount: 5,
+  sources: ["TechWire", "ChipDaily"],
+  whyItMatters: ["Capacity constrains accelerator supply."],
+  entities: [{ name: "TSMC", normalized: "tsmc", type: "company" }],
+  trendDelta: 40,
+  trendDir: "up",
+};
+
 describe("sanitizeScanStatePayload", () => {
   it("passes a well-formed payload through unchanged", () => {
     const payload = {
       teachingIds: ["article-1", "article-2"],
+      teachingItems: [wellFormedTeachingItem],
       digest: true,
       clusterRatings: {
         "article-1|article-2": {
@@ -26,10 +49,64 @@ describe("sanitizeScanStatePayload", () => {
     for (const input of [undefined, null, "junk", 42, ["array"]]) {
       expect(sanitizeScanStatePayload(input)).toEqual({
         teachingIds: [],
+        teachingItems: [],
         digest: false,
         clusterRatings: {},
       });
     }
+  });
+
+  it("drops teaching items without an id or headline and dedupes by id", () => {
+    const out = sanitizeScanStatePayload({
+      teachingItems: [
+        "junk",
+        null,
+        { id: "no-headline" },
+        { headline: "no id" },
+        wellFormedTeachingItem,
+        { ...wellFormedTeachingItem, headline: "duplicate id is dropped" },
+      ],
+    });
+
+    expect(out.teachingItems).toEqual([wellFormedTeachingItem]);
+  });
+
+  it("coerces malformed teaching item fields to safe values", () => {
+    const out = sanitizeScanStatePayload({
+      teachingItems: [
+        {
+          id: "article-9",
+          headline: "Minimal entry",
+          domain: "NotADomain",
+          confidence: "certain",
+          trendDir: "sideways",
+          impact: 99,
+          trendDelta: -9999,
+          memberIds: "nope",
+          tags: [4, "ok"],
+          entities: [{ noName: true }, { name: "Acme" }],
+        },
+      ],
+    });
+
+    const item = out.teachingItems[0];
+    expect(item.domain).toBe("General");
+    expect(item.confidence).toBe("low");
+    expect(item.trendDir).toBe("flat");
+    expect(item.impact).toBe(10);
+    expect(item.trendDelta).toBe(-1000);
+    expect(item.memberIds).toEqual([]);
+    expect(item.tags).toEqual(["ok"]);
+    expect(item.entities).toEqual([{ name: "Acme", normalized: "acme", type: "other" }]);
+    expect(typeof item.addedAt).toBe("string");
+  });
+
+  it("caps teaching items at 200 entries", () => {
+    const many = Array.from({ length: 250 }, (_, i) => ({
+      id: `id-${i}`,
+      headline: `Story ${i}`,
+    }));
+    expect(sanitizeScanStatePayload({ teachingItems: many }).teachingItems).toHaveLength(200);
   });
 
   it("drops non-string teaching ids, clamps long ones, and caps the list at 500", () => {

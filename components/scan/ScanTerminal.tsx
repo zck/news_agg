@@ -38,9 +38,21 @@ import {
   type InterestLevel,
   type ScanRow,
 } from "@/lib/scanViewModel";
+import {
+  buildTeachingLookup,
+  dedupeTeachingItems,
+  findTeachingItemIdForRow,
+  migrateLegacyTeachingIds,
+  normalizeTeachingItems,
+  teachingItemFromRow,
+  type TeachingItem,
+} from "@/lib/teachingPack";
 import type { Article, ArticleDomain, ImportanceFeedback } from "@/lib/types";
 
-const TEACHING_STORAGE_KEY = "scan.teaching.v1";
+// v2 stores self-contained snapshots; v1 stored bare article ids and is
+// kept only as a migration source.
+const TEACHING_STORAGE_KEY = "scan.teaching.v2";
+const LEGACY_TEACHING_STORAGE_KEY = "scan.teaching.v1";
 const DIGEST_STORAGE_KEY = "scan.digest.v1";
 const CLUSTER_RATING_STORAGE_KEY = "scan.cluster-rating.v1";
 
@@ -56,6 +68,22 @@ function readLocalStorageJson<T>(key: string, fallback: T): T {
 
 function uniqueIds(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+// Single builder so the save effect and the post-load snapshot serialize
+// identically (key order matters for the skip-unchanged comparison).
+// teachingIds is kept in the payload for downgrade compatibility.
+function buildScanStatePayload(
+  teaching: TeachingItem[],
+  digest: boolean,
+  clusterRatings: ClusterRatingStore,
+) {
+  return {
+    teachingIds: teaching.map((item) => item.id),
+    teachingItems: teaching,
+    digest,
+    clusterRatings,
+  };
 }
 
 // Two-pass localStorage hook — avoids SSR/hydration mismatch.
@@ -111,7 +139,7 @@ export function ScanTerminal() {
   // In desktop mode the local DB copy of these three is authoritative (loaded
   // in loadData); usePersisted's localStorage copy is the web-mode store and
   // the one-time migration source.
-  const [teaching, setTeaching] = usePersisted<string[]>(TEACHING_STORAGE_KEY, []);
+  const [teaching, setTeaching] = usePersisted<TeachingItem[]>(TEACHING_STORAGE_KEY, []);
   const [digest, setDigest] = usePersisted<boolean>(DIGEST_STORAGE_KEY, false);
   const [desktopScanLoaded, setDesktopScanLoaded] = useState(false);
   // Serialized snapshot of the scan state last persisted to the desktop DB —
@@ -153,18 +181,40 @@ export function ScanTerminal() {
         setFeedbackMap(storedFeedback);
         saveLearningProfile(rebuildLearningProfile(localArticles, storedFeedback));
 
-        const localTeaching = readLocalStorageJson<string[]>(TEACHING_STORAGE_KEY, []);
-        const storedTeaching = storedScanState?.teachingIds ?? [];
-        const teachingSource = storedScanState?.updatedAt
-          ? storedTeaching
-          : uniqueIds([...storedTeaching, ...localTeaching]);
-        // Prune ids whose articles no longer exist — but never against an
-        // empty load: the DB copy is authoritative, so pruning during a
-        // transient empty article list would wipe the teaching pack for good.
-        const liveIds = new Set(localArticles.map((a) => a.id));
-        const nextTeaching = localArticles.length
-          ? teachingSource.filter((id) => liveIds.has(id))
-          : teachingSource;
+        // Teaching entries are self-contained snapshots — never pruned
+        // against the loaded article window. Stories that age out of the
+        // feed keep rendering from their snapshot until explicitly removed.
+        const storedItems = normalizeTeachingItems(storedScanState?.teachingItems);
+        const legacyStoredIds = storedScanState?.teachingIds ?? [];
+        let baseTeaching = storedItems;
+        if (storedItems.length === 0 && legacyStoredIds.length > 0) {
+          // One-time migration from the id-only format: snapshot every id
+          // that still resolves to a loaded cluster (lead or member).
+          const legacyLocalIds = readLocalStorageJson<string[]>(
+            LEGACY_TEACHING_STORAGE_KEY,
+            [],
+          );
+          const idSource = storedScanState?.updatedAt
+            ? legacyStoredIds
+            : uniqueIds([...legacyStoredIds, ...legacyLocalIds]);
+          const migrationClusters = clusterArticles(localArticles);
+          const migrationRows = buildScanViewModel(
+            localArticles,
+            migrationClusters,
+          ).rows;
+          baseTeaching = migrateLegacyTeachingIds(
+            idSource,
+            migrationRows,
+            migrationClusters,
+            new Date().toISOString(),
+          );
+        }
+        const localTeaching = normalizeTeachingItems(
+          readLocalStorageJson<unknown>(TEACHING_STORAGE_KEY, []),
+        );
+        const nextTeaching = storedScanState?.updatedAt
+          ? baseTeaching
+          : dedupeTeachingItems([...baseTeaching, ...localTeaching]);
         const nextDigest = storedScanState?.updatedAt
           ? storedScanState.digest
           : readLocalStorageJson<boolean>(DIGEST_STORAGE_KEY, false);
@@ -176,12 +226,15 @@ export function ScanTerminal() {
         setClusterRatings(nextRatings);
         // Seed the save-effect snapshot so loading by itself doesn't rewrite
         // scanState (updatedAt should mean "last user edit", not "last load").
-        lastSavedScanRef.current = JSON.stringify({
-          teachingIds: nextTeaching,
-          digest: nextDigest,
-          clusterRatings: nextRatings,
-        });
-        setDesktopScanLoaded(true);
+        lastSavedScanRef.current = JSON.stringify(
+          buildScanStatePayload(nextTeaching, nextDigest, nextRatings),
+        );
+        // A null state means the IPC read itself failed. Leave saving
+        // disabled for the session rather than risk overwriting the DB
+        // copy with a degraded localStorage-only view.
+        if (storedScanState) {
+          setDesktopScanLoaded(true);
+        }
       } else {
         setFeedbackMap(loadImportanceFeedback());
       }
@@ -207,7 +260,7 @@ export function ScanTerminal() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.desktop?.scan || !desktopScanLoaded) return;
-    const payload = { teachingIds: teaching, digest, clusterRatings };
+    const payload = buildScanStatePayload(teaching, digest, clusterRatings);
     const serialized = JSON.stringify(payload);
     if (serialized === lastSavedScanRef.current) {
       // State matches what's already persisted — nothing pending to flush.
@@ -282,8 +335,18 @@ export function ScanTerminal() {
     [interestByRowId],
   );
 
-  // O(1) teaching-pack lookup for rows.
-  const teachingSet = useMemo(() => new Set(teaching), [teaching]);
+  // Teaching-pack membership for rows. Matching goes through every article
+  // id captured in each snapshot (not just the saved lead id) so a row keeps
+  // its "in pack" mark even after re-clustering picks a different lead.
+  const teachingLookup = useMemo(() => buildTeachingLookup(teaching), [teaching]);
+  const teachingItemIdByRowId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      const itemId = findTeachingItemIdForRow(r, teachingLookup);
+      if (itemId) map.set(r.id, itemId);
+    }
+    return map;
+  }, [rows, teachingLookup]);
 
   // First-load auto-select. Uses a ref so closing the reader (selectedId → null)
   // doesn't immediately re-select the first row.
@@ -389,17 +452,19 @@ export function ScanTerminal() {
   }, [setClusterRatings]);
 
   const toggleTeaching = useCallback(
-    (id: string) => {
-      setTeaching((prev) =>
-        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-      );
+    (row: ScanRow) => {
+      setTeaching((prev) => {
+        const existing = findTeachingItemIdForRow(row, buildTeachingLookup(prev));
+        if (existing) return prev.filter((item) => item.id !== existing);
+        return [...prev, teachingItemFromRow(row, new Date().toISOString())];
+      });
     },
     [setTeaching],
   );
 
   const removeTeaching = useCallback(
-    (id: string) => {
-      setTeaching((prev) => prev.filter((x) => x !== id));
+    (itemId: string) => {
+      setTeaching((prev) => prev.filter((item) => item.id !== itemId));
     },
     [setTeaching],
   );
@@ -416,7 +481,7 @@ export function ScanTerminal() {
     selected: ScanRow | null;
     drawerOpen: boolean;
     rateRow: (row: ScanRow, next: InterestLevel | null) => void;
-    toggleTeaching: (id: string) => void;
+    toggleTeaching: (row: ScanRow) => void;
     setSelectedId: Dispatch<SetStateAction<string | null>>;
     setActiveTag: Dispatch<SetStateAction<string | null>>;
     setDrawerOpen: Dispatch<SetStateAction<boolean>>;
@@ -485,7 +550,7 @@ export function ScanTerminal() {
         return;
       }
       if (e.key === "t" && s.selected) {
-        s.toggleTeaching(s.selected.id);
+        s.toggleTeaching(s.selected);
         e.preventDefault();
         return;
       }
@@ -703,7 +768,7 @@ export function ScanTerminal() {
                   index={i + 1}
                   selected={selectedId === r.id}
                   interest={interestForRow(r)}
-                  inTeaching={teachingSet.has(r.id)}
+                  inTeaching={teachingItemIdByRowId.has(r.id)}
                   onSelect={() => setSelectedId(r.id)}
                   onRate={(v) => rateRow(r, v)}
                 />
@@ -717,7 +782,7 @@ export function ScanTerminal() {
                   row={r}
                   selected={selectedId === r.id}
                   interest={interestForRow(r)}
-                  inTeaching={teachingSet.has(r.id)}
+                  inTeaching={teachingItemIdByRowId.has(r.id)}
                   onSelect={() => setSelectedId(r.id)}
                   onRate={(v) => rateRow(r, v)}
                   onTag={handleTagToggle}
@@ -733,15 +798,15 @@ export function ScanTerminal() {
         interest={selected ? interestForRow(selected) : null}
         setInterest={(v) => selected && rateRow(selected, v)}
         onClose={() => setSelectedId(null)}
-        onAddTeaching={() => selected && toggleTeaching(selected.id)}
-        inTeaching={Boolean(selected && teachingSet.has(selected.id))}
+        onAddTeaching={() => selected && toggleTeaching(selected)}
+        inTeaching={Boolean(selected && teachingItemIdByRowId.has(selected.id))}
         width={440}
       />
 
       <TeachingDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        itemIds={teaching}
+        items={teaching}
         rows={rows}
         onRemove={removeTeaching}
       />

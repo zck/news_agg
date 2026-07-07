@@ -7,6 +7,7 @@ const defaultPreferences = {
 
 const defaultScanState = {
   teachingIds: [],
+  teachingItems: [],
   digest: false,
   clusterRatings: {},
   updatedAt: null,
@@ -116,6 +117,7 @@ function getScanState(db) {
 function saveScanState(db, next) {
   const state = {
     teachingIds: Array.isArray(next?.teachingIds) ? next.teachingIds : [],
+    teachingItems: Array.isArray(next?.teachingItems) ? next.teachingItems : [],
     digest: Boolean(next?.digest),
     clusterRatings:
       next?.clusterRatings && typeof next.clusterRatings === "object"

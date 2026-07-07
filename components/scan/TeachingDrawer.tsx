@@ -11,20 +11,36 @@ import {
   teachingFilename,
 } from "@/lib/scanExport";
 import type { ScanRow } from "@/lib/scanViewModel";
+import { teachingItemToRow, type TeachingItem } from "@/lib/teachingPack";
 
 type TeachingDrawerProps = {
   open: boolean;
   onClose: () => void;
-  itemIds: string[];
+  items: TeachingItem[];
   rows: ScanRow[];
-  onRemove: (id: string) => void;
+  onRemove: (itemId: string) => void;
 };
 
-export function TeachingDrawer({ open, onClose, itemIds, rows, onRemove }: TeachingDrawerProps) {
+export function TeachingDrawer({ open, onClose, items, rows, onRemove }: TeachingDrawerProps) {
+  // Every saved item renders: from the live cluster when the story is still
+  // in the feed (matched by any member id, so lead drift doesn't hide it),
+  // otherwise from the snapshot taken when it was saved.
   const sel = useMemo(() => {
-    const map = new Map(rows.map((r) => [r.id, r]));
-    return itemIds.map((id) => map.get(id)).filter((r): r is ScanRow => Boolean(r));
-  }, [rows, itemIds]);
+    const rowByArticleId = new Map<string, ScanRow>();
+    for (const r of rows) {
+      if (!rowByArticleId.has(r.id)) rowByArticleId.set(r.id, r);
+      for (const m of r.members) {
+        if (!rowByArticleId.has(m.id)) rowByArticleId.set(m.id, r);
+      }
+    }
+    return items.map((item) => {
+      const live =
+        rowByArticleId.get(item.id) ??
+        item.memberIds.map((id) => rowByArticleId.get(id)).find(Boolean);
+      return { itemId: item.id, row: live ?? teachingItemToRow(item), live: Boolean(live) };
+    });
+  }, [rows, items]);
+  const exportRows = useMemo(() => sel.map((s) => s.row), [sel]);
 
   return (
     <aside
@@ -96,9 +112,9 @@ export function TeachingDrawer({ open, onClose, itemIds, rows, onRemove }: Teach
             a markdown brief or slide outline for class.
           </div>
         ) : (
-          sel.map((r) => (
+          sel.map(({ itemId, row: r, live }) => (
             <div
-              key={r.id}
+              key={itemId}
               style={{
                 border: "1px solid #e2e8f0",
                 borderRadius: 10,
@@ -114,11 +130,29 @@ export function TeachingDrawer({ open, onClose, itemIds, rows, onRemove }: Teach
                   marginBottom: 6,
                 }}
               >
-                <DomainChip domain={r.domain} size="xs" />
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <DomainChip domain={r.domain} size="xs" />
+                  {!live ? (
+                    <span
+                      title="No longer in the current feed — showing your saved copy"
+                      className="font-semibold uppercase tracking-[0.08em]"
+                      style={{
+                        fontSize: 9,
+                        color: "#64748b",
+                        background: "#f1f5f9",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 4,
+                        padding: "1px 5px",
+                      }}
+                    >
+                      saved copy
+                    </span>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   aria-label={`Remove ${r.headline} from teaching pack`}
-                  onClick={() => onRemove(r.id)}
+                  onClick={() => onRemove(itemId)}
                   className="font-semibold hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:rounded"
                   style={{
                     fontSize: 10,
@@ -144,7 +178,7 @@ export function TeachingDrawer({ open, onClose, itemIds, rows, onRemove }: Teach
 
       {sel.length > 0 ? (
         <>
-          <ExportPreview rows={sel} />
+          <ExportPreview rows={exportRows} />
           <div
             style={{
               padding: 14,
@@ -156,7 +190,7 @@ export function TeachingDrawer({ open, onClose, itemIds, rows, onRemove }: Teach
             <button
               type="button"
               onClick={() =>
-                downloadText(teachingFilename("teaching-pack"), buildTeachingMarkdown(sel))
+                downloadText(teachingFilename("teaching-pack"), buildTeachingMarkdown(exportRows))
               }
               className="font-semibold hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               style={{
@@ -175,7 +209,7 @@ export function TeachingDrawer({ open, onClose, itemIds, rows, onRemove }: Teach
             <button
               type="button"
               onClick={() =>
-                downloadText(teachingFilename("slide-outline"), buildSlideOutline(sel))
+                downloadText(teachingFilename("slide-outline"), buildSlideOutline(exportRows))
               }
               className="font-semibold hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               style={{

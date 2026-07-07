@@ -245,6 +245,62 @@ function sanitizePreferences(input) {
   };
 }
 
+const MAX_TEACHING_ITEMS = 200;
+const TEACHING_CONFIDENCE = new Set(["low", "medium", "high"]);
+const TEACHING_TREND = new Set(["up", "down", "flat"]);
+
+// Teaching-pack entries are self-contained story snapshots; each field is
+// clamped individually so an oversized or malformed renderer payload can't
+// bloat or corrupt the preferences row.
+function sanitizeTeachingItemArray(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const entry of input.slice(0, MAX_TEACHING_ITEMS)) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = clampString(entry.id, 256);
+    const headline = clampString(entry.headline, 500);
+    if (!id || !headline || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      addedAt: clampString(entry.addedAt, 40) ?? new Date().toISOString(),
+      memberIds: clampStringArrayWithLimit(entry.memberIds, 256, 50),
+      domain: sanitizeMemoryDomain(entry.domain) ?? "General",
+      headline,
+      summary: clampString(entry.summary, 4000) ?? "",
+      source: clampString(entry.source, 240),
+      url: clampString(entry.url, 2048),
+      date: clampString(entry.date, 40) ?? "",
+      tags: clampStringArrayWithLimit(entry.tags, 120, 24),
+      impact: clampNumber(entry.impact, { min: 0, max: 10 }) ?? 0,
+      confidence: TEACHING_CONFIDENCE.has(entry.confidence) ? entry.confidence : "low",
+      sourceCount: Math.round(clampNumber(entry.sourceCount, { min: 0, max: 10000 }) ?? 0),
+      articleCount: Math.round(clampNumber(entry.articleCount, { min: 0, max: 10000 }) ?? 0),
+      sources: clampStringArrayWithLimit(entry.sources, 240, 24),
+      whyItMatters: clampStringArrayWithLimit(entry.whyItMatters, 500, 8),
+      entities: Array.isArray(entry.entities)
+        ? entry.entities
+            .slice(0, 30)
+            .map((raw) => {
+              if (!raw || typeof raw !== "object") return null;
+              const name = clampString(raw.name, 200);
+              if (!name) return null;
+              return {
+                name,
+                normalized: clampString(raw.normalized, 200) ?? name.toLowerCase(),
+                type: clampString(raw.type, 40) ?? "other",
+              };
+            })
+            .filter(Boolean)
+        : [],
+      trendDelta: Math.round(clampNumber(entry.trendDelta, { min: -1000, max: 1000 }) ?? 0),
+      trendDir: TEACHING_TREND.has(entry.trendDir) ? entry.trendDir : "flat",
+    });
+  }
+  return out;
+}
+
 function sanitizeScanStatePayload(input) {
   const src = pickObject(input);
   const rawRatings = pickObject(src.clusterRatings);
@@ -269,6 +325,7 @@ function sanitizeScanStatePayload(input) {
 
   return {
     teachingIds: clampStringArrayWithLimit(src.teachingIds, 256, MAX_SCAN_ITEMS),
+    teachingItems: sanitizeTeachingItemArray(src.teachingItems),
     digest: Boolean(src.digest),
     clusterRatings,
   };

@@ -264,9 +264,30 @@ describe("Electron Phase 2 local data layer", () => {
 
   it("persists scan teaching state in local preferences", () => {
     const db = createDb();
+    const teachingItem = {
+      id: "article-1",
+      addedAt: "2026-04-18T12:00:00.000Z",
+      memberIds: ["article-1", "article-2"],
+      domain: "Semis",
+      headline: "AI chip packaging suppliers add capacity",
+      summary: "Advanced packaging capacity expands for accelerators.",
+      date: "2026-04-18T09:00:00.000Z",
+      tags: ["chips"],
+      impact: 8,
+      confidence: "high",
+      sourceCount: 3,
+      articleCount: 5,
+      sources: ["TechWire"],
+      whyItMatters: [],
+      entities: [],
+      trendDelta: 40,
+      trendDir: "up",
+    };
     const saved = saveScanState(db, {
-      // Teaching ids are article ids (the prune matches them against article.id).
       teachingIds: ["article-1", "article-2"],
+      // Self-contained snapshots — must round-trip even after the underlying
+      // articles churn out of the feed window.
+      teachingItems: [teachingItem],
       digest: true,
       clusterRatings: {
         "article-1|article-2": {
@@ -280,8 +301,27 @@ describe("Electron Phase 2 local data layer", () => {
 
     expect(saved.updatedAt).toEqual(expect.any(String));
     expect(stored.teachingIds).toEqual(["article-1", "article-2"]);
+    expect(stored.teachingItems).toEqual([teachingItem]);
     expect(stored.digest).toBe(true);
     expect(stored.clusterRatings["article-1|article-2"].interest).toBe(4);
+  });
+
+  it("defaults teachingItems to an empty array for legacy scan state", () => {
+    const db = createDb();
+    saveScanState(db, { teachingIds: ["article-1"], digest: false, clusterRatings: {} });
+    // Simulate a row written by a build that predates teachingItems.
+    const stored = JSON.parse(
+      db.prepare("SELECT value_json FROM preferences WHERE key = 'scanState'").get()
+        .value_json as string,
+    );
+    delete stored.teachingItems;
+    db.prepare("UPDATE preferences SET value_json = ? WHERE key = 'scanState'").run(
+      JSON.stringify(stored),
+    );
+
+    const reread = getScanState(db);
+    expect(reread.teachingItems).toEqual([]);
+    expect(reread.teachingIds).toEqual(["article-1"]);
   });
 
   it("persists cluster feedback and updates affinities", () => {

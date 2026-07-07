@@ -78,6 +78,7 @@ declare global {
 
   type DesktopScanState = {
     teachingIds: string[];
+    teachingItems?: import("@/lib/teachingPack").TeachingItem[];
     digest: boolean;
     clusterRatings: import("@/lib/clusterRatings").ClusterRatingStore;
     updatedAt?: string | null;
