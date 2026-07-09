@@ -127,11 +127,32 @@ const modeBtn = (active: boolean) => ({
   transition: "all .12s",
 });
 
+function formatRefreshResult(result: DesktopOperationResult) {
+  if (result.skipped) {
+    if (result.skipReason === "running") return "Refresh already running.";
+    if (result.skipReason === "battery") return "Refresh paused on battery.";
+    if (result.skipReason === "idle") return "Refresh paused while idle.";
+    if (result.skipReason === "memory") return "Refresh paused for memory pressure.";
+    return result.error ?? "Refresh skipped.";
+  }
+
+  const incoming = result.incoming ?? (result.inserted ?? 0) + (result.updated ?? 0);
+  const fresh = result.fresh ?? result.inserted ?? 0;
+  const known = result.skippedKnown ?? 0;
+  const parts = [`${fresh} new`, `${incoming} pulled`];
+  if (known > 0) parts.push(`${known} already known`);
+  if (result.warning) parts.push(result.warning);
+  return parts.join(" · ");
+}
+
 export function ScanTerminal() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [feedbackMap, setFeedbackMap] = useState<Record<string, ImportanceFeedback>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [activeDomain, setActiveDomain] = useState<ArticleDomain | "All">("All");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -252,10 +273,46 @@ export function ScanTerminal() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.desktop) return;
-    const unsub = window.desktop.jobs.onRefreshComplete(() => {
+    const unsub = window.desktop.jobs.onRefreshComplete((result) => {
+      setRefreshing(false);
+      if (result?.success === false && result.error) {
+        setRefreshError(result.error);
+        setRefreshStatus(null);
+      } else if (result) {
+        setRefreshError(null);
+        setRefreshStatus(formatRefreshResult(result));
+      }
       void loadData();
     });
     return unsub;
+  }, [loadData]);
+
+  const handleRefresh = useCallback(async () => {
+    if (typeof window === "undefined" || !window.desktop?.jobs) {
+      setRefreshError("Refresh is only available in the desktop app.");
+      setRefreshStatus(null);
+      return;
+    }
+
+    setRefreshing(true);
+    setRefreshError(null);
+    setRefreshStatus("Refreshing feeds...");
+    try {
+      const result = await window.desktop.jobs.runRefreshNow();
+      if (!result.success && result.error) {
+        setRefreshError(result.error);
+        setRefreshStatus(null);
+      } else {
+        setRefreshError(null);
+        setRefreshStatus(formatRefreshResult(result));
+      }
+      await loadData();
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : "Refresh failed");
+      setRefreshStatus(null);
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadData]);
 
   useEffect(() => {
@@ -647,6 +704,25 @@ export function ScanTerminal() {
               </h1>
             </div>
             <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={refreshing}
+                style={{
+                  padding: "6px 12px",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: 7,
+                  background: refreshing ? "#f0fdf4" : "#dcfce7",
+                  color: "#166534",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: refreshing ? "not-allowed" : "pointer",
+                  opacity: refreshing ? 0.72 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {refreshing ? "Refreshing..." : "Refresh feeds"}
+              </button>
               {/* Digest toggle */}
               <div
                 style={{
@@ -693,6 +769,29 @@ export function ScanTerminal() {
               activeTag={activeTag}
               onTagClick={handleTagToggle}
             />
+          ) : null}
+          {refreshError || refreshStatus ? (
+            <div
+              role={refreshError ? "alert" : "status"}
+              style={{
+                marginTop: 10,
+                padding: "8px 11px",
+                borderRadius: 7,
+                border: refreshError ? "1px solid #fda4af" : "1px solid #bfdbfe",
+                background: refreshError ? "#fff1f2" : "#eff6ff",
+                color: refreshError ? "#9f1239" : "#1e40af",
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {refreshError ? (
+                <>
+                  Refresh failed — <span className="font-mono">{refreshError}</span>
+                </>
+              ) : (
+                refreshStatus
+              )}
+            </div>
           ) : null}
         </div>
 
