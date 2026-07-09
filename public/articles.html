@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>News Agg Articles</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #f7fafc;
+        color: #0f172a;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        border-bottom: 1px solid #dbe3ef;
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(12px);
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 18px 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+
+      .meta {
+        color: #64748b;
+        font-size: 13px;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 24px 20px 48px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .tabs {
+        display: inline-flex;
+        gap: 2px;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        background: #eef3f8;
+        padding: 2px;
+      }
+
+      .tabs button {
+        border: 0;
+        background: transparent;
+      }
+
+      .tabs button.active {
+        background: #0f172a;
+        color: #fff;
+      }
+
+      input,
+      select,
+      button {
+        height: 38px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        color: #0f172a;
+        font: inherit;
+        font-size: 14px;
+      }
+
+      input {
+        min-width: min(340px, 100%);
+        flex: 1;
+        padding: 0 12px;
+      }
+
+      select,
+      button {
+        padding: 0 10px;
+      }
+
+      button {
+        cursor: pointer;
+        font-weight: 650;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 12px;
+      }
+
+      article {
+        min-height: 210px;
+        border: 1px solid #dbe3ef;
+        border-radius: 8px;
+        background: #fff;
+        padding: 16px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+      }
+
+      article.cluster {
+        min-height: 0;
+      }
+
+      .eyebrow {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        font-size: 17px;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: #334155;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      a {
+        color: #0369a1;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 12px 0 14px;
+      }
+
+      .chip {
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #075985;
+        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .cluster-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;
+        padding-left: 0;
+      }
+
+      .cluster-list li {
+        list-style: none;
+        border-top: 1px solid #edf2f7;
+        padding-top: 8px;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .timeline-day {
+        border-left: 2px solid #bae6fd;
+        padding-left: 14px;
+      }
+
+      .timeline-day-title {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        margin: 0 0 8px -2px;
+        border: 1px solid #bae6fd;
+        border-radius: 999px;
+        background: #f0f9ff;
+        color: #075985;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .timeline-day-title::before {
+        content: "";
+        position: absolute;
+        left: -21px;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #0284c7;
+        box-shadow: 0 0 0 4px #e0f2fe;
+      }
+
+      .timeline-item {
+        position: relative;
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 10px;
+        min-height: 34px;
+        margin: 0 0 8px;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -19px;
+        top: 10px;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #38bdf8;
+        box-shadow: 0 0 0 3px #eff6ff;
+      }
+
+      .timeline-time {
+        align-self: start;
+        border-radius: 6px;
+        background: #f1f5f9;
+        color: #475569;
+        padding: 3px 6px;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        text-align: center;
+      }
+
+      .timeline-source {
+        color: #64748b;
+        font-weight: 700;
+      }
+
+      .prediction {
+        position: relative;
+        margin-top: 10px;
+        border: 1px solid #fed7aa;
+        border-radius: 8px;
+        background: #fff7ed;
+        color: #7c2d12;
+        padding: 10px 12px;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .prediction::before {
+        content: "";
+        position: absolute;
+        left: -20px;
+        top: 16px;
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #f97316;
+        box-shadow: 0 0 0 4px #ffedd5;
+      }
+
+      .prediction-label {
+        display: block;
+        margin-bottom: 4px;
+        color: #9a3412;
+        font-size: 11px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .prediction-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .prediction-actions button {
+        height: 30px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
+      .prediction-actions button.active {
+        border-color: #0f172a;
+        background: #0f172a;
+        color: #fff;
+      }
+
+      .vote-count {
+        margin-left: 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          monospace;
+        font-size: 11px;
+        opacity: 0.75;
+      }
+
+      .empty {
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+        padding: 36px;
+        background: #fff;
+        color: #64748b;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <div>
+          <h1>External Articles</h1>
+          <div id="status" class="meta">Loading RSS feeds...</div>
+        </div>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="controls">
+        <input id="search" type="search" placeholder="Search headlines, summaries, sources" />
+        <select id="domain">
+          <option value="">All sectors</option>
+        </select>
+        <select id="source">
+          <option value="">All sources</option>
+        </select>
+        <div class="tabs" aria-label="View mode">
+          <button id="articles-tab" type="button">Articles</button>
+          <button id="clusters-tab" type="button" class="active">Timeline</button>
+        </div>
+      </div>
+      <section id="articles" class="grid"></section>
+    </main>
+
+    <script>
+      const state = {
+        articles: [],
+        filtered: [],
+        clusters: [],
+        mode: "clusters",
+        votes: readVotes(),
+      };
+
+      const statusEl = document.querySelector("#status");
+      const gridEl = document.querySelector("#articles");
+      const searchEl = document.querySelector("#search");
+      const domainEl = document.querySelector("#domain");
+      const sourceEl = document.querySelector("#source");
+      const refreshEl = document.querySelector("#refresh");
+      const articlesTabEl = document.querySelector("#articles-tab");
+      const clustersTabEl = document.querySelector("#clusters-tab");
+
+      const stopwords = new Set([
+        "about",
+        "after",
+        "again",
+        "against",
+        "all",
+        "also",
+        "and",
+        "announced",
+        "any",
+        "are",
+        "around",
+        "but",
+        "because",
+        "been",
+        "being",
+        "between",
+        "can",
+        "could",
+        "for",
+        "from",
+        "has",
+        "have",
+        "how",
+        "into",
+        "its",
+        "more",
+        "most",
+        "news",
+        "not",
+        "now",
+        "our",
+        "out",
+        "over",
+        "new",
+        "say",
+        "says",
+        "the",
+        "you",
+        "than",
+        "that",
+        "their",
+        "there",
+        "these",
+        "this",
+        "through",
+        "under",
+        "using",
+        "with",
+        "would",
+        "will",
+        "your",
+      ]);
+      const weakKeywords = new Set(["general", "uncategorized", "article", "articles", "rss"]);
+
+      function shortDate(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      }
+
+      function timelineDate(value) {
+        if (!value) return "Unknown date";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      }
+
+      function timelineDay(value) {
+        if (!value) return "Unknown date";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleDateString(undefined, {
+          weekday: "short",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      }
+
+      function timelineTime(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      }
+
+      function oneLineSummary(article, fallbackKeywords = []) {
+        const headline = String(article?.headline || "").replace(/\s+/g, " ").trim();
+        const summary = String(article?.summary || "").replace(/\s+/g, " ").trim();
+        const base = headline || summary || fallbackKeywords.join(", ") || "Clustered news update";
+
+        if (base.length <= 110) return base;
+        return `${base.slice(0, 107).replace(/\s+\S*$/, "")}...`;
+      }
+
+      function predictNextStep(cluster) {
+        const keywords = cluster.topKeywords.slice(0, 3).join(", ");
+        const sourceCount = cluster.sources.size;
+        const articleCount = cluster.articles.length;
+        const leadDomain = cluster.articles[0]?.domain || "this topic";
+        const latest = cluster.articles[0];
+        const latestSource = latest?.source ? `${latest.source} and adjacent sources` : "more sources";
+
+        if (sourceCount >= 4 || articleCount >= 6) {
+          return `Expect follow-up coverage from ${latestSource} within the next cycle, with attention shifting from the headline event to evidence, reactions, and market impact around ${keywords}.`;
+        }
+
+        if (articleCount >= 3) {
+          return `This looks like an emerging thread. If the sequence continues, the next update will likely clarify who is affected and whether ${keywords} becomes a broader ${leadDomain} story.`;
+        }
+
+        return `This is still an early signal. Watch for another source to confirm whether ${keywords || leadDomain} develops into a durable story.`;
+      }
+
+      function readVotes() {
+        try {
+          return JSON.parse(localStorage.getItem("newsAggPredictionVotes") || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      function saveVotes() {
+        try {
+          localStorage.setItem("newsAggPredictionVotes", JSON.stringify(state.votes));
+        } catch {
+          // Ignore storage failures; the on-page counts still update for this session.
+        }
+      }
+
+      function voteForCluster(clusterId) {
+        return state.votes[clusterId] || { agree: 0, disagree: 0, user: null };
+      }
+
+      function applyVote(clusterId, nextVote) {
+        const vote = { ...voteForCluster(clusterId) };
+
+        if (vote.user === nextVote) return vote;
+        if (vote.user === "agree") vote.agree = Math.max(0, vote.agree - 1);
+        if (vote.user === "disagree") vote.disagree = Math.max(0, vote.disagree - 1);
+
+        if (nextVote === "agree") vote.agree += 1;
+        if (nextVote === "disagree") vote.disagree += 1;
+        vote.user = nextVote;
+
+        state.votes[clusterId] = vote;
+        saveVotes();
+        return vote;
+      }
+
+      function optionList(values) {
+        return [...new Set(values.filter(Boolean))].sort();
+      }
+
+      function tokenize(text) {
+        return String(text || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, " ")
+          .split(/\s+/)
+          .map((word) => word.replace(/^-+|-+$/g, ""))
+          .filter((word) => word.length > 2 && !stopwords.has(word));
+      }
+
+      function extractKeywords(article) {
+        const sourceHints = [article.domain, ...(article.tags || [])]
+          .filter(Boolean)
+          .map((value) => String(value).toLowerCase())
+          .filter((value) => !weakKeywords.has(value));
+        const words = tokenize(`${article.headline} ${article.summary}`);
+        const counts = new Map();
+
+        for (const hint of sourceHints) {
+          counts.set(hint, (counts.get(hint) || 0) + 3);
+        }
+
+        for (const word of words) {
+          const inHeadline = (article.headline || "").toLowerCase().includes(word);
+          counts.set(word, (counts.get(word) || 0) + (inHeadline ? 2 : 1));
+        }
+
+        return [...counts.entries()]
+          .filter(([word]) => !weakKeywords.has(word))
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .slice(0, 6)
+          .map(([word]) => word);
+      }
+
+      function clusterArticles(articles) {
+        const clusters = new Map();
+
+        for (const article of articles) {
+          article.keywords = extractKeywords(article);
+          const key = article.keywords.find((keyword) => !weakKeywords.has(keyword)) || article.domain || "general";
+          if (!clusters.has(key)) {
+            clusters.set(key, {
+              key,
+              keywords: new Map(),
+              articles: [],
+              sources: new Set(),
+              domains: new Set(),
+            });
+          }
+          const cluster = clusters.get(key);
+          cluster.articles.push(article);
+          if (article.source) cluster.sources.add(article.source);
+          if (article.domain) cluster.domains.add(article.domain);
+          for (const keyword of article.keywords) {
+            cluster.keywords.set(keyword, (cluster.keywords.get(keyword) || 0) + 1);
+          }
+        }
+
+        return [...clusters.values()]
+          .map((cluster) => ({
+            ...cluster,
+            id: `${cluster.key}-${cluster.articles.map((article) => article.id).slice(0, 3).join("-")}`,
+            articles: cluster.articles.sort((a, b) => {
+              return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+            }),
+            topKeywords: [...cluster.keywords.entries()]
+              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+              .slice(0, 8)
+              .map(([word]) => word),
+          }))
+          .sort((a, b) => b.articles.length - a.articles.length || a.key.localeCompare(b.key));
+      }
+
+      function timelineGroups(articles) {
+        const groups = new Map();
+
+        for (const article of articles) {
+          const day = timelineDay(article.date);
+          if (!groups.has(day)) groups.set(day, []);
+          groups.get(day).push(article);
+        }
+
+        return [...groups.entries()];
+      }
+
+      function fillOptions(select, values, label) {
+        const selected = select.value;
+        select.innerHTML = `<option value="">${label}</option>`;
+        for (const value of values) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          select.append(option);
+        }
+        select.value = values.includes(selected) ? selected : "";
+      }
+
+      function applyFilters() {
+        const q = searchEl.value.trim().toLowerCase();
+        const domain = domainEl.value;
+        const source = sourceEl.value;
+
+        state.filtered = state.articles.filter((article) => {
+          const searchable = [
+            article.headline,
+            article.summary,
+            article.source,
+            article.domain,
+            ...(article.tags || []),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
+          return (
+            (!q || searchable.includes(q)) &&
+            (!domain || article.domain === domain) &&
+            (!source || article.source === source)
+          );
+        });
+        state.clusters = clusterArticles(state.filtered);
+
+        render();
+      }
+
+      function render() {
+        articlesTabEl.classList.toggle("active", state.mode === "articles");
+        clustersTabEl.classList.toggle("active", state.mode === "clusters");
+        statusEl.textContent =
+          state.mode === "clusters"
+            ? `${state.clusters.length} clusters · ${state.filtered.length} articles`
+            : `${state.filtered.length} shown · ${state.articles.length} fetched`;
+        gridEl.innerHTML = "";
+
+        if (!state.filtered.length) {
+          gridEl.className = "";
+          gridEl.innerHTML = '<div class="empty">No articles match the current filters.</div>';
+          return;
+        }
+
+        if (state.mode === "clusters") {
+          gridEl.className = "grid";
+          for (const cluster of state.clusters) {
+            const card = document.createElement("article");
+            card.className = "cluster";
+            const sample = cluster.articles.slice(0, 5);
+            const lead = cluster.articles[0];
+            const title = oneLineSummary(lead, cluster.topKeywords);
+            const groups = timelineGroups(sample);
+            const vote = voteForCluster(cluster.id);
+            card.innerHTML = `
+              <div class="eyebrow">
+                <span>${cluster.articles.length} articles</span>
+                <span>${cluster.sources.size} sources</span>
+              </div>
+              <h2>${title}</h2>
+              <div class="chips">
+                ${cluster.topKeywords.map((keyword) => `<span class="chip">${keyword}</span>`).join("")}
+              </div>
+              <div class="timeline">
+                ${groups
+                  .map(
+                    ([day, articles]) =>
+                      `<div class="timeline-day">
+                        <div class="timeline-day-title">${day}</div>
+                        ${articles
+                          .map(
+                            (article) =>
+                              `<div class="timeline-item">
+                                <span class="timeline-time">${timelineTime(article.date) || timelineDate(article.date)}</span>
+                                <span>
+                                  <span class="timeline-source">${article.source || "Unknown"}</span>:
+                                  ${oneLineSummary(article)}
+                                </span>
+                              </div>`,
+                          )
+                          .join("")}
+                        <div class="prediction" data-cluster-id="${cluster.id}">
+                          <span class="prediction-label">Predicted next</span>
+                          ${predictNextStep(cluster)}
+                          <div class="prediction-actions">
+                            <button type="button" data-vote="agree" class="${vote.user === "agree" ? "active" : ""}">
+                              Agree <span class="vote-count" data-count="agree">${vote.agree}</span>
+                            </button>
+                            <button type="button" data-vote="disagree" class="${vote.user === "disagree" ? "active" : ""}">
+                              Disagree <span class="vote-count" data-count="disagree">${vote.disagree}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>`,
+                  )
+                  .join("")}
+              </div>
+            `;
+            gridEl.append(card);
+          }
+          return;
+        }
+
+        gridEl.className = "grid";
+        for (const article of state.filtered) {
+          const card = document.createElement("article");
+          card.innerHTML = `
+            <div class="eyebrow">
+              <span>${article.domain || "General"}</span>
+              <span>${article.source || ""} ${shortDate(article.date)}</span>
+            </div>
+            <h2>${article.headline || "Untitled"}</h2>
+            <p>${article.summary || "Summary unavailable."}</p>
+            <div class="chips">
+              ${(article.keywords || []).map((keyword) => `<span class="chip">${keyword}</span>`).join("")}
+            </div>
+            ${article.url ? `<a href="${article.url}" target="_blank" rel="noreferrer">Open source</a>` : ""}
+          `;
+          gridEl.append(card);
+        }
+      }
+
+      async function loadArticles() {
+        statusEl.textContent = "Fetching external RSS feeds...";
+        refreshEl.disabled = true;
+        try {
+          const dataUrl = location.port === "3000" ? "/api/rss" : "/articles-data.json";
+          const response = await fetch(dataUrl, { cache: "no-store" });
+          if (!response.ok) throw new Error(`RSS request failed: ${response.status}`);
+          const payload = await response.json();
+          state.articles = payload.articles || [];
+          fillOptions(domainEl, optionList(state.articles.map((a) => a.domain)), "All sectors");
+          fillOptions(sourceEl, optionList(state.articles.map((a) => a.source)), "All sources");
+          applyFilters();
+        } catch (error) {
+          state.articles = [];
+          state.filtered = [];
+          gridEl.className = "";
+          gridEl.innerHTML = `<div class="empty">${error.message || "Unable to fetch articles."}</div>`;
+          statusEl.textContent = "Could not load RSS feeds.";
+        } finally {
+          refreshEl.disabled = false;
+        }
+      }
+
+      searchEl.addEventListener("input", applyFilters);
+      domainEl.addEventListener("change", applyFilters);
+      sourceEl.addEventListener("change", applyFilters);
+      refreshEl.addEventListener("click", loadArticles);
+      gridEl.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-vote]");
+        if (!button) return;
+
+        const prediction = button.closest(".prediction");
+        if (!prediction) return;
+        const clusterId = prediction.dataset.clusterId;
+        if (!clusterId) return;
+
+        const vote = applyVote(clusterId, button.dataset.vote);
+        const actionButtons = prediction.querySelectorAll("[data-vote]");
+        actionButtons.forEach((item) => item.classList.toggle("active", item === button));
+
+        const agreeCount = prediction.querySelector('[data-count="agree"]');
+        const disagreeCount = prediction.querySelector('[data-count="disagree"]');
+        if (agreeCount) agreeCount.textContent = vote.agree;
+        if (disagreeCount) disagreeCount.textContent = vote.disagree;
+      });
+      articlesTabEl.addEventListener("click", () => {
+        state.mode = "articles";
+        render();
+      });
+      clustersTabEl.addEventListener("click", () => {
+        state.mode = "clusters";
+        render();
+      });
+
+      loadArticles();
+    </script>
+  </body>
+</html>

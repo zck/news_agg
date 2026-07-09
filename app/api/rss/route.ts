@@ -4,7 +4,7 @@ import { ingestFeeds } from "@/lib/ingest";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const payload = await ingestFeeds();
+  const payload = await ingestFeeds({ fast: true });
 
   return NextResponse.json(payload, {
     headers: {

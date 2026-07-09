@@ -18,6 +18,7 @@ import {
 import { generateNarrativeInsights } from "@/lib/insights";
 import { analyzePatterns, computeTrendSignals } from "@/lib/patterns";
 import { fallbackArticles } from "@/lib/data";
+import { ingestFeeds } from "@/lib/ingest";
 import { defaultUserProfile, personalizeStoryCluster } from "@/lib/user";
 import { buildNarrativeThreads } from "@/lib/narratives";
 import { computeConnections } from "@/lib/connections";
@@ -131,9 +132,64 @@ function fallbackBrief(patterns: ReturnType<typeof analyzePatterns>): WeeklyBrie
   };
 }
 
+async function liveRssDashboardData() {
+  const payload = await ingestFeeds({ fast: true });
+  const articles = payload.articles;
+  const storyClusters = payload.storyClusters ?? payload.clusters ?? clusterArticles(articles);
+  const patterns = analyzePatterns(articles, "All");
+  const trendSignals = computeTrendSignals(patterns);
+  const narratives = buildNarrativeThreads(storyClusters);
+  const connections = computeConnections(storyClusters);
+  const scenarios = generateScenarios({ trends: trendSignals, narratives, connections });
+  const implications = scenarios.map(generateImplications);
+  const watchItems = scenarios.map(generateWatchItems);
+  const narrativeInsights = generateNarrativeInsights({
+    trends: trendSignals,
+    narratives,
+    connections,
+  });
+
+  return {
+    articles,
+    storyClusters,
+    affinities: [],
+    rules: [],
+    trendSignals,
+    narratives,
+    connections,
+    scenarios,
+    implications,
+    watchItems,
+    brief: fallbackBrief(patterns),
+    patterns,
+    longTermTrends: {
+      rising: [],
+      declining: [],
+      stable: [],
+      available: false,
+    } satisfies LongTermTrendAnalysis,
+    insightReport: {
+      insights: [],
+      inflections: [],
+      crossDomainShifts: [],
+      narrativeInsights,
+      generatedAt: payload.fetchedAt,
+      usedFallback: true,
+    } satisfies InsightEngineResult,
+    fetchedAt: payload.fetchedAt,
+  };
+}
+
 async function cachedDashboardData() {
   if (!hasDatabase()) {
-    return desktopBootstrapData();
+    try {
+      return await liveRssDashboardData();
+    } catch (error) {
+      console.warn(
+        `[dashboard] live RSS read failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+      return desktopBootstrapData();
+    }
   }
 
   try {
@@ -168,7 +224,7 @@ async function cachedDashboardData() {
     ]);
 
     if (!cachedArticles.length) {
-      return desktopBootstrapData();
+      return liveRssDashboardData();
     }
 
     const baseClusters = storedClusters.length
@@ -244,10 +300,6 @@ async function cachedDashboardData() {
 }
 
 export default async function DashboardPage() {
-  if (process.env.ELECTRON_RENDERER_MODE === "desktop") {
-    return <CommandCenterClient {...desktopBootstrapData()} />;
-  }
-
   const dashboardData = await cachedDashboardData();
 
   return (

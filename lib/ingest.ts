@@ -17,6 +17,14 @@ const MAX_DASHBOARD_ARTICLES = 300;
 const MAX_CONCURRENT_FEEDS = 3;
 const MAX_FEED_BYTES = 1_500_000;
 const FEED_BATCH_PAUSE_MS = 150;
+const FAST_MAX_ARTICLES_PER_SOURCE = 8;
+const FAST_MAX_DASHBOARD_ARTICLES = 180;
+const FAST_MAX_CONCURRENT_FEEDS = 8;
+const FAST_FEED_TIMEOUT_MS = 8000;
+
+type IngestOptions = {
+  fast?: boolean;
+};
 
 type ArticleCache = {
   articles: Article[];
@@ -107,8 +115,8 @@ async function readResponseTextWithLimit(
 }
 
 function normalizeItem(source: RssSource, item: Parser.Item): Article | null {
-  const headline = item.title?.trim();
-  const url = item.link?.trim();
+  const headline = typeof item.title === "string" ? item.title.trim() : "";
+  const url = typeof item.link === "string" ? item.link.trim() : "";
 
   if (!headline || !url) {
     return null;
@@ -138,14 +146,14 @@ function normalizeItem(source: RssSource, item: Parser.Item): Article | null {
   };
 }
 
-async function fetchFeed(source: RssSource) {
+async function fetchFeed(source: RssSource, options: IngestOptions = {}) {
   try {
     const response = await fetch(source.url, {
       headers: {
         Accept: "application/rss+xml, application/xml, text/xml",
         "User-Agent": "news-agg-rss-ingestor/1.0",
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(options.fast ? FAST_FEED_TIMEOUT_MS : 15000),
       next: { revalidate: 600 },
     });
 
@@ -166,7 +174,7 @@ async function fetchFeed(source: RssSource) {
     }
 
     return (feed.items ?? [])
-      .slice(0, MAX_ARTICLES_PER_SOURCE)
+      .slice(0, options.fast ? FAST_MAX_ARTICLES_PER_SOURCE : MAX_ARTICLES_PER_SOURCE)
       .map((item) => normalizeItem(source, item))
       .filter((article): article is Article => article !== null);
   } catch (error) {
@@ -176,14 +184,15 @@ async function fetchFeed(source: RssSource) {
   }
 }
 
-async function fetchFeedsWithThrottle() {
+async function fetchFeedsWithThrottle(options: IngestOptions = {}) {
   const results: Article[][] = [];
+  const maxConcurrent = options.fast ? FAST_MAX_CONCURRENT_FEEDS : MAX_CONCURRENT_FEEDS;
 
-  for (let index = 0; index < sources.length; index += MAX_CONCURRENT_FEEDS) {
-    const batch = sources.slice(index, index + MAX_CONCURRENT_FEEDS);
-    results.push(...(await Promise.all(batch.map((source) => fetchFeed(source)))));
+  for (let index = 0; index < sources.length; index += maxConcurrent) {
+    const batch = sources.slice(index, index + maxConcurrent);
+    results.push(...(await Promise.all(batch.map((source) => fetchFeed(source, options)))));
 
-    if (index + MAX_CONCURRENT_FEEDS < sources.length) {
+    if (index + maxConcurrent < sources.length) {
       await sleep(FEED_BATCH_PAUSE_MS);
     }
   }
@@ -191,17 +200,20 @@ async function fetchFeedsWithThrottle() {
   return results;
 }
 
-async function refreshFeeds() {
-  const settled = await fetchFeedsWithThrottle();
+async function refreshFeeds(options: IngestOptions = {}) {
+  const settled = await fetchFeedsWithThrottle(options);
   const deduped = deduplicateArticles(settled.flat())
     .sort((left, right) => {
       return new Date(right.date).getTime() - new Date(left.date).getTime();
     })
-    .slice(0, MAX_DASHBOARD_ARTICLES);
+    .slice(0, options.fast ? FAST_MAX_DASHBOARD_ARTICLES : MAX_DASHBOARD_ARTICLES);
 
-  const enriched = await processArticlesInBatches(deduped);
+  const enriched = options.fast ? deduped : await processArticlesInBatches(deduped);
   const articles = enriched.length ? enriched : fallbackArticles;
-  const storyClusters = await synthesizeWhyItMatters(clusterArticles(articles), articles);
+  const rawClusters = clusterArticles(articles);
+  const storyClusters = options.fast
+    ? rawClusters
+    : await synthesizeWhyItMatters(rawClusters, articles);
 
   const nextCache = {
     articles,
@@ -216,9 +228,10 @@ async function refreshFeeds() {
   return nextCache;
 }
 
-export async function ingestFeeds() {
+export async function ingestFeeds(options: IngestOptions = {}) {
   if (
     articleCache &&
+    articleCache.articles.length > 0 &&
     Date.now() - new Date(articleCache.fetchedAt).getTime() < THIRTY_MINUTES
   ) {
     return articleCache;
@@ -228,7 +241,7 @@ export async function ingestFeeds() {
     return ingestPromise;
   }
 
-  ingestPromise = refreshFeeds();
+  ingestPromise = refreshFeeds(options);
 
   try {
     return await ingestPromise;
