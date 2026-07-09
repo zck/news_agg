@@ -109,12 +109,17 @@
       }
 
       .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 12px;
+        display: block;
+        columns: 300px;
+        column-gap: 12px;
       }
 
       article {
+        display: inline-block;
+        width: 100%;
+        box-sizing: border-box;
+        break-inside: avoid;
+        margin: 0 0 12px;
         min-height: 210px;
         border: 1px solid #dbe3ef;
         border-radius: 8px;
@@ -125,6 +130,44 @@
 
       article.cluster {
         min-height: 0;
+      }
+
+      article.pinned {
+        border-color: #f59e0b;
+        box-shadow: 0 12px 28px rgba(245, 158, 11, 0.12);
+      }
+
+      .pin-button {
+        height: 28px;
+        border-color: #cbd5e1;
+        background: #fff;
+        color: #475569;
+        padding: 0 9px;
+        font-size: 12px;
+      }
+
+      .pin-button.active {
+        border-color: #f59e0b;
+        background: #fffbeb;
+        color: #92400e;
+      }
+
+      .ai-image {
+        position: relative;
+        display: block;
+        height: 132px;
+        margin: -2px -2px 12px;
+        border: 1px solid #dbe3ef;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #eef2f7;
+      }
+
+      .ai-image img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .eyebrow {
@@ -331,6 +374,55 @@
         opacity: 0.75;
       }
 
+      .comments {
+        margin-top: 12px;
+        border-top: 1px solid #fed7aa;
+        padding-top: 10px;
+      }
+
+      .comment-form {
+        display: flex;
+        gap: 8px;
+      }
+
+      .comment-form input {
+        min-width: 0;
+        height: 34px;
+        border-color: #fdba74;
+        font-size: 13px;
+      }
+
+      .comment-form button {
+        height: 34px;
+        border-color: #fdba74;
+        background: #fff;
+        color: #9a3412;
+        font-size: 12px;
+      }
+
+      .comment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 9px;
+      }
+
+      .comment {
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.72);
+        padding: 7px 8px;
+        color: #431407;
+        font-size: 12.5px;
+      }
+
+      .comment-time {
+        display: block;
+        margin-top: 3px;
+        color: #9a3412;
+        font-size: 10.5px;
+        font-weight: 750;
+      }
+
       .empty {
         border: 1px dashed #cbd5e1;
         border-radius: 8px;
@@ -376,6 +468,8 @@
         clusters: [],
         mode: "clusters",
         votes: readVotes(),
+        comments: readComments(),
+        pins: readPins(),
       };
 
       const statusEl = document.querySelector("#status");
@@ -492,6 +586,148 @@
         return `${base.slice(0, 107).replace(/\s+\S*$/, "")}...`;
       }
 
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function hashString(value) {
+        let hash = 0;
+        const text = String(value || "");
+        for (let index = 0; index < text.length; index += 1) {
+          hash = (hash << 5) - hash + text.charCodeAt(index);
+          hash |= 0;
+        }
+        return Math.abs(hash);
+      }
+
+      function visualLabel(article, fallbackKeywords = []) {
+        const words = article?.keywords?.length ? article.keywords : fallbackKeywords;
+        return (words || [])
+          .slice(0, 2)
+          .map((word) => String(word).replace(/-/g, " "))
+          .join(" / ")
+          .toUpperCase();
+      }
+
+      function normalizeImageUrl(value) {
+        if (!value) return "";
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          return /^https?:\/\//i.test(trimmed) ? trimmed : "";
+        }
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            const url = normalizeImageUrl(item);
+            if (url) return url;
+          }
+          return "";
+        }
+        if (typeof value === "object") {
+          return normalizeImageUrl(value.url || value.href || value.src || value.thumbnail);
+        }
+        return "";
+      }
+
+      function articleImageUrl(article) {
+        const candidates = [
+          article?.image,
+          article?.imageUrl,
+          article?.urlToImage,
+          article?.thumbnail,
+          article?.thumbnailUrl,
+          article?.media,
+          article?.mediaContent,
+          article?.mediaThumbnail,
+          article?.enclosure,
+        ];
+        for (const candidate of candidates) {
+          const url = normalizeImageUrl(candidate);
+          if (url) return url;
+        }
+        return "";
+      }
+
+      function articleHasRealImage(article) {
+        return Boolean(articleImageUrl(article));
+      }
+
+      function clusterImageArticle(cluster) {
+        return cluster.articles.find(articleHasRealImage) || cluster.articles[0];
+      }
+
+      function visualHeight(article, options = {}) {
+        const base = options.cluster ? 112 : 132;
+        const range = options.cluster ? 86 : 72;
+        return base + (hashString(`${article?.id || ""}${article?.headline || ""}`) % range);
+      }
+
+      function generatedVisualSrc(article, options = {}) {
+        const text = `${article?.headline || ""} ${article?.summary || ""} ${article?.domain || ""}`;
+        const hash = hashString(text);
+        const palettes = [
+          ["#0f766e", "#f97316", "#ecfeff"],
+          ["#2563eb", "#f59e0b", "#eff6ff"],
+          ["#be123c", "#0891b2", "#fff1f2"],
+          ["#166534", "#e11d48", "#f0fdf4"],
+          ["#7c2d12", "#0d9488", "#fff7ed"],
+          ["#4338ca", "#84cc16", "#eef2ff"],
+          ["#0369a1", "#dc2626", "#f0f9ff"],
+        ];
+        const [primary, accent, wash] = palettes[hash % palettes.length];
+        const label = escapeHtml(visualLabel(article, options.keywords) || article?.domain || "NEWS");
+        const title = escapeHtml(oneLineSummary(article, options.keywords));
+        const width = 920;
+        const height = 360;
+        const orbit = 44 + (hash % 44);
+        const barA = 120 + (hash % 180);
+        const barB = 90 + ((hash >> 3) % 170);
+        const barC = 150 + ((hash >> 5) % 140);
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${title}">
+            <defs>
+              <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0" stop-color="${wash}"/>
+                <stop offset="0.58" stop-color="#ffffff"/>
+                <stop offset="1" stop-color="${primary}" stop-opacity="0.24"/>
+              </linearGradient>
+              <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="${primary}" stroke-opacity="0.09" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect width="${width}" height="${height}" fill="url(#bg)"/>
+            <rect width="${width}" height="${height}" fill="url(#grid)"/>
+            <circle cx="${width - 126}" cy="82" r="${orbit}" fill="${accent}" fill-opacity="0.22"/>
+            <circle cx="${width - 132}" cy="86" r="${Math.max(18, orbit - 18)}" fill="none" stroke="${primary}" stroke-width="10" stroke-opacity="0.28"/>
+            <path d="M 0 ${height - 92} C ${width * 0.23} ${height - 162}, ${width * 0.42} ${height - 30}, ${width} ${height - 112} L ${width} ${height} L 0 ${height} Z" fill="${primary}" fill-opacity="0.16"/>
+            <rect x="40" y="82" width="${barA}" height="18" rx="9" fill="${primary}" fill-opacity="0.82"/>
+            <rect x="40" y="120" width="${barB}" height="12" rx="6" fill="${accent}" fill-opacity="0.72"/>
+            <rect x="40" y="146" width="${barC}" height="12" rx="6" fill="#0f172a" fill-opacity="0.15"/>
+            <g transform="translate(${width - 246} ${height - 126})">
+              <rect x="0" y="0" width="178" height="74" rx="14" fill="#ffffff" fill-opacity="0.76" stroke="${primary}" stroke-opacity="0.32"/>
+              <path d="M24 48 L56 22 L86 44 L116 18 L154 48" fill="none" stroke="${accent}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="26" cy="24" r="9" fill="${primary}" fill-opacity="0.62"/>
+            </g>
+            <text x="40" y="${height - 44}" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800" letter-spacing="0">${label}</text>
+          </svg>
+        `;
+        return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+      }
+
+      function articleVisual(article, options = {}) {
+        const generatedSrc = generatedVisualSrc(article, options);
+        const realSrc = articleImageUrl(article);
+        const src = realSrc || generatedSrc;
+        const title = escapeHtml(oneLineSummary(article, options.keywords));
+        return `<span class="ai-image ${realSrc ? "source-image" : "generated-image"}" style="height: ${visualHeight(article, options)}px">
+          <img alt="Image for ${title}" src="${escapeHtml(src)}" data-fallback="${escapeHtml(generatedSrc)}" loading="lazy" onerror="this.onerror=null; this.src=this.dataset.fallback;" />
+        </span>`;
+      }
+
       function predictNextStep(cluster) {
         const keywords = cluster.topKeywords.slice(0, 3).join(", ");
         const sourceCount = cluster.sources.size;
@@ -517,6 +753,109 @@
         } catch {
           return {};
         }
+      }
+
+      function readComments() {
+        try {
+          return JSON.parse(localStorage.getItem("newsAggPredictionComments") || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      function readPins() {
+        try {
+          return JSON.parse(localStorage.getItem("newsAggPinnedClusters") || "{}");
+        } catch {
+          return {};
+        }
+      }
+
+      function savePins() {
+        try {
+          localStorage.setItem("newsAggPinnedClusters", JSON.stringify(state.pins));
+        } catch {
+          // Ignore storage failures; pinned order still updates during this session.
+        }
+      }
+
+      function pinTime(clusterId) {
+        return state.pins[clusterId] || "";
+      }
+
+      function isPinned(clusterId) {
+        return Boolean(pinTime(clusterId));
+      }
+
+      function togglePin(clusterId) {
+        if (isPinned(clusterId)) {
+          delete state.pins[clusterId];
+        } else {
+          state.pins[clusterId] = new Date().toISOString();
+        }
+        savePins();
+      }
+
+      function sortPinnedClusters(clusters) {
+        return [...clusters].sort((a, b) => {
+          const aPinned = pinTime(a.id);
+          const bPinned = pinTime(b.id);
+          if (aPinned && bPinned) return new Date(bPinned).getTime() - new Date(aPinned).getTime();
+          if (aPinned) return -1;
+          if (bPinned) return 1;
+          return 0;
+        });
+      }
+
+      function saveComments() {
+        try {
+          localStorage.setItem("newsAggPredictionComments", JSON.stringify(state.comments));
+        } catch {
+          // Ignore storage failures; comments still show during this session.
+        }
+      }
+
+      function commentsForCluster(clusterId) {
+        return state.comments[clusterId] || [];
+      }
+
+      function addComment(clusterId, text) {
+        const trimmed = text.trim();
+        if (!trimmed) return commentsForCluster(clusterId);
+        const next = [
+          ...commentsForCluster(clusterId),
+          {
+            text: trimmed,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        state.comments[clusterId] = next;
+        saveComments();
+        return next;
+      }
+
+      function commentTime(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      }
+
+      function renderComments(comments) {
+        if (!comments.length) return "";
+        return comments
+          .map(
+            (comment) =>
+              `<div class="comment">
+                ${escapeHtml(comment.text)}
+                <span class="comment-time">${commentTime(comment.createdAt)}</span>
+              </div>`,
+          )
+          .join("");
       }
 
       function saveVotes() {
@@ -692,44 +1031,53 @@
 
         if (state.mode === "clusters") {
           gridEl.className = "grid";
-          for (const cluster of state.clusters) {
+          for (const cluster of sortPinnedClusters(state.clusters)) {
             const card = document.createElement("article");
-            card.className = "cluster";
+            const pinned = isPinned(cluster.id);
+            card.className = `cluster${pinned ? " pinned" : ""}`;
             const sample = cluster.articles.slice(0, 5);
             const lead = cluster.articles[0];
+            const imageArticle = clusterImageArticle(cluster);
             const title = oneLineSummary(lead, cluster.topKeywords);
             const groups = timelineGroups(sample);
             const vote = voteForCluster(cluster.id);
+            const comments = commentsForCluster(cluster.id);
             card.innerHTML = `
               <div class="eyebrow">
                 <span>${cluster.articles.length} articles</span>
-                <span>${cluster.sources.size} sources</span>
+                <span>
+                  ${cluster.sources.size} sources
+                  <button class="pin-button ${pinned ? "active" : ""}" type="button" data-pin="${escapeHtml(cluster.id)}">
+                    ${pinned ? "Pinned" : "Pin"}
+                  </button>
+                </span>
               </div>
-              <h2>${title}</h2>
+              ${articleVisual(imageArticle, { keywords: cluster.topKeywords, cluster: true })}
+              <h2>${escapeHtml(title)}</h2>
               <div class="chips">
-                ${cluster.topKeywords.map((keyword) => `<span class="chip">${keyword}</span>`).join("")}
+                ${cluster.topKeywords.map((keyword) => `<span class="chip">${escapeHtml(keyword)}</span>`).join("")}
               </div>
               <div class="timeline">
                 ${groups
                   .map(
                     ([day, articles]) =>
                       `<div class="timeline-day">
-                        <div class="timeline-day-title">${day}</div>
+                        <div class="timeline-day-title">${escapeHtml(day)}</div>
                         ${articles
                           .map(
                             (article) =>
                               `<div class="timeline-item">
                                 <span class="timeline-time">${timelineTime(article.date) || timelineDate(article.date)}</span>
                                 <span>
-                                  <span class="timeline-source">${article.source || "Unknown"}</span>:
-                                  ${oneLineSummary(article)}
+                                  <span class="timeline-source">${escapeHtml(article.source || "Unknown")}</span>:
+                                  ${escapeHtml(oneLineSummary(article))}
                                 </span>
                               </div>`,
                           )
                           .join("")}
                         <div class="prediction" data-cluster-id="${cluster.id}">
                           <span class="prediction-label">Predicted next</span>
-                          ${predictNextStep(cluster)}
+                          ${escapeHtml(predictNextStep(cluster))}
                           <div class="prediction-actions">
                             <button type="button" data-vote="agree" class="${vote.user === "agree" ? "active" : ""}">
                               Agree <span class="vote-count" data-count="agree">${vote.agree}</span>
@@ -737,6 +1085,13 @@
                             <button type="button" data-vote="disagree" class="${vote.user === "disagree" ? "active" : ""}">
                               Disagree <span class="vote-count" data-count="disagree">${vote.disagree}</span>
                             </button>
+                          </div>
+                          <div class="comments">
+                            <form class="comment-form">
+                              <input type="text" name="comment" placeholder="Add a comment" />
+                              <button type="submit">Post</button>
+                            </form>
+                            <div class="comment-list">${renderComments(comments)}</div>
                           </div>
                         </div>
                       </div>`,
@@ -753,16 +1108,17 @@
         for (const article of state.filtered) {
           const card = document.createElement("article");
           card.innerHTML = `
+            ${articleVisual(article)}
             <div class="eyebrow">
-              <span>${article.domain || "General"}</span>
-              <span>${article.source || ""} ${shortDate(article.date)}</span>
+              <span>${escapeHtml(article.domain || "General")}</span>
+              <span>${escapeHtml(article.source || "")} ${escapeHtml(shortDate(article.date))}</span>
             </div>
-            <h2>${article.headline || "Untitled"}</h2>
-            <p>${article.summary || "Summary unavailable."}</p>
+            <h2>${escapeHtml(article.headline || "Untitled")}</h2>
+            <p>${escapeHtml(article.summary || "Summary unavailable.")}</p>
             <div class="chips">
-              ${(article.keywords || []).map((keyword) => `<span class="chip">${keyword}</span>`).join("")}
+              ${(article.keywords || []).map((keyword) => `<span class="chip">${escapeHtml(keyword)}</span>`).join("")}
             </div>
-            ${article.url ? `<a href="${article.url}" target="_blank" rel="noreferrer">Open source</a>` : ""}
+            ${article.url ? `<a href="${escapeHtml(article.url)}" target="_blank" rel="noreferrer">Open source</a>` : ""}
           `;
           gridEl.append(card);
         }
@@ -796,6 +1152,13 @@
       sourceEl.addEventListener("change", applyFilters);
       refreshEl.addEventListener("click", loadArticles);
       gridEl.addEventListener("click", (event) => {
+        const pinButton = event.target.closest("[data-pin]");
+        if (pinButton) {
+          togglePin(pinButton.dataset.pin);
+          render();
+          return;
+        }
+
         const button = event.target.closest("[data-vote]");
         if (!button) return;
 
@@ -812,6 +1175,21 @@
         const disagreeCount = prediction.querySelector('[data-count="disagree"]');
         if (agreeCount) agreeCount.textContent = vote.agree;
         if (disagreeCount) disagreeCount.textContent = vote.disagree;
+      });
+      gridEl.addEventListener("submit", (event) => {
+        const form = event.target.closest(".comment-form");
+        if (!form) return;
+        event.preventDefault();
+
+        const prediction = form.closest(".prediction");
+        const clusterId = prediction?.dataset.clusterId;
+        const input = form.querySelector('input[name="comment"]');
+        const list = prediction?.querySelector(".comment-list");
+        if (!clusterId || !input || !list) return;
+
+        const comments = addComment(clusterId, input.value);
+        input.value = "";
+        list.innerHTML = renderComments(comments);
       });
       articlesTabEl.addEventListener("click", () => {
         state.mode = "articles";
