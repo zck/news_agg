@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { ArticleDomain } from "@/lib/types";
 import { ARTICLE_DOMAINS } from "@/lib/types";
@@ -45,12 +46,19 @@ const countBadge: CSSProperties = {
   fontWeight: 600,
 };
 
-const HUB_LINKS: Array<{ href: string; label: string }> = [
+const PRIMARY_LINKS: Array<{ href: string; label: string }> = [
   { href: "/", label: "Hub" },
   { href: "/trends", label: "Trends" },
   { href: "/patterns", label: "Patterns" },
+];
+
+const FOOTER_LINKS: Array<{ href: string; label: string }> = [
   { href: "/brief", label: "Brief" },
 ];
+
+function isActivePath(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
 
 export function SectorRail({
   totalCount,
@@ -61,6 +69,8 @@ export function SectorRail({
   teachingCount,
   onOpenTeaching,
 }: SectorRailProps) {
+  const pathname = usePathname();
+
   return (
     <aside
       style={{
@@ -92,6 +102,58 @@ export function SectorRail({
           {totalCount} clusters · live
         </div>
       </div>
+
+      {/* Primary navigation */}
+      <nav
+        aria-label="Primary views"
+        style={{
+          padding: "12px",
+          borderBottom: "1px solid #1e293b",
+          display: "grid",
+          gap: 8,
+        }}
+      >
+        {PRIMARY_LINKS.map((link) => {
+          const active = isActivePath(pathname, link.href);
+
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="font-semibold"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                minHeight: 38,
+                padding: "9px 11px",
+                borderRadius: 8,
+                border: active ? "1px solid #38bdf8" : "1px solid #1e293b",
+                background: active ? "#0f172a" : "rgba(148,163,184,0.08)",
+                color: active ? "#e0f2fe" : "#cbd5e1",
+                boxShadow: active ? "0 0 0 1px rgba(56,189,248,0.2)" : "none",
+                fontSize: 13,
+              }}
+            >
+              <span>{link.label}</span>
+              {active ? (
+                <span
+                  className="font-mono"
+                  style={{
+                    borderRadius: 999,
+                    background: "rgba(56,189,248,0.18)",
+                    color: "#7dd3fc",
+                    fontSize: 10,
+                    padding: "2px 6px",
+                  }}
+                >
+                  now
+                </span>
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
 
       {/* Sector list */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
@@ -255,7 +317,7 @@ export function SectorRail({
           gap: 4,
         }}
       >
-        {HUB_LINKS.map((l) => (
+        {FOOTER_LINKS.map((l) => (
           <Link
             key={l.href}
             href={l.href}
